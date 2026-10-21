@@ -416,6 +416,9 @@ def loop_principal():
             print("[*] Os itens configurados já foram comprados nesta rotação da loja. Renovando...")
         else:
             print("[*] Item(ns) não encontrado(s) na loja atual. Renovando...")
+        if gemas_gastas + CUSTO_RENOVAR_GEMAS > limite_gemas:
+            motivo_parada = "limite de gemas"
+            break
         if not renovar_loja(janela, template_renovar, template_confirmar):
             print("[!] Falha ao renovar a loja. Parando por segurança.")
             motivo_parada = "erro ao renovar a loja"
