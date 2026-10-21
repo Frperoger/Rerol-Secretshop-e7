@@ -118,10 +118,12 @@ def configurar_orcamento() -> dict:
     dinheiro_inicial = _perguntar("Dinheiro disponível", 0)
     limite_gemas = _perguntar("Quanto gastar de gemas (0 = até acabar)", gemas_iniciais)
     limite_dinheiro = _perguntar("Quanto gastar de dinheiro (0 = até acabar)", dinheiro_inicial)
+    
     if limite_gemas <= 0:
         limite_gemas = gemas_iniciais
     if limite_dinheiro <= 0:
         limite_dinheiro = dinheiro_inicial
+        
     if limite_gemas > gemas_iniciais:
         raise ValueError(
             f"Erro de orçamento: o limite de gasto de gemas ({limite_gemas}) é maior"
@@ -339,7 +341,7 @@ def renovar_loja(janela: JanelaJogo, template_renovar, template_confirmar) -> bo
 
     return True
 
-def procurar_e_comprar(janela: JanelaJogo, itens: list, template_confirmar) -> set:
+def procurar_e_comprar(janela: JanelaJogo, itens: list, template_confirmar, limite_dinheiro:int) -> set:
     global contador_compras, gold_gasto
     comprados = set()
     rolar_para_topo(janela)
@@ -349,6 +351,8 @@ def procurar_e_comprar(janela: JanelaJogo, itens: list, template_confirmar) -> s
             return comprados
         for idx, item in enumerate(itens):
             if idx in comprados:
+                continue
+            if gold_gasto + item.preco_gold > limite_dinheiro:
                 continue
             if tentar_comprar_item(janela, item, template_confirmar):
                 contador_compras[item.nome] = contador_compras.get(item.nome, 0) + 1
@@ -363,7 +367,14 @@ def procurar_e_comprar(janela: JanelaJogo, itens: list, template_confirmar) -> s
     return comprados
 
 def loop_principal():
-    global contador_renovacoes, gemas_gastas
+    global contador_renovacoes, gemas_gastas, motivo_parada
+    
+    orcamento = configurar_orcamento()
+    gemas_iniciais = orcamento["gemas_iniciais"]
+    dinheiro_inicial = orcamento["dinheiro_inicial"]
+    limite_gemas = orcamento["limite_gemas"]
+    limite_dinheiro = orcamento["limite_dinheiro"]
+    
     print("Localizando janela do jogo...")
     janela = localizar_janela_jogo()
     print(f"Janela encontrada: {janela}")
@@ -380,19 +391,26 @@ def loop_principal():
     template_confirmar = None
     if TEMPLATE_CONFIRMAR.exists():
         template_confirmar = carregar_template(TEMPLATE_CONFIRMAR)
+
     registrar_hotkey_cancelamento()
     print(f"Pressione {TECLA_CANCELAR} a qualquer momento para cancelar.")
+    print(f"Orçamento: gastar até {limite_gemas} gemas e {limite_dinheiro:,} de dinheiro."
+          .replace(",", "."))
     print("Iniciando em 3 segundos — deixe a janela do jogo em foco...")
     time.sleep(3)
     itens_ja_comprados_nesta_rodada_de_loja = set()
     while not evento_parar.is_set():
+        if not orcamento_ok(limite_gemas, limite_dinheiro):
+            break
         clique_aleatorio_seguro(janela)
         pausa_humana()
         if evento_parar.is_set():
             break
-        comprados_agora = procurar_e_comprar(janela, ITENS, template_confirmar)
+        comprados_agora = procurar_e_comprar(janela, ITENS, template_confirmar, limite_dinheiro)
         itens_ja_comprados_nesta_rodada_de_loja |= comprados_agora
         if evento_parar.is_set():
+            break
+        if not orcamento_ok(limite_gemas, limite_dinheiro):
             break
         if len(itens_ja_comprados_nesta_rodada_de_loja) == len(ITENS):
             print("[*] Os itens configurados já foram comprados nesta rotação da loja. Renovando...")
@@ -400,14 +418,24 @@ def loop_principal():
             print("[*] Item(ns) não encontrado(s) na loja atual. Renovando...")
         if not renovar_loja(janela, template_renovar, template_confirmar):
             print("[!] Falha ao renovar a loja. Parando por segurança.")
+            motivo_parada = "erro ao renovar a loja"
             break
         contador_renovacoes += 1
+        gemas_gastas += CUSTO_RENOVAR_GEMAS
         itens_ja_comprados_nesta_rodada_de_loja.clear()
         pausa_humana(1.0, 1.8)
+
+    if evento_parar.is_set() and motivo_parada == "cancelado":
+        motivo_parada = "cancelado pelo usuário"
+
     total_itens = sum(contador_compras.values())
     print("\n=== Relatório da execução ===")
+    print(f"Motivo da parada: {motivo_parada}")
+    print(f"Gemas: {gemas_iniciais} -> {gemas_iniciais - gemas_gastas} "
+          f"(gastas: {gemas_gastas})")
+    print(f"Dinheiro: {dinheiro_inicial:,} -> {dinheiro_inicial - gold_gasto:,}"
+          .replace(",", "."))
     print(f"Loja renovada: {contador_renovacoes}x")
-    print(f"Gemas gastas renovando: {gemas_gastas}")
     print(f"Ouro gasto comprando: {gold_gasto:,}".replace(",", "."))
     print(f"Itens comprados (total: {total_itens}):")
     if contador_compras:
