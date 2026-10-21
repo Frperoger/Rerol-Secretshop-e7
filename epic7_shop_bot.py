@@ -8,7 +8,6 @@ if the game is also running with elevated privileges; otherwise,
 Windows may block the simulated clicks from reaching the game window.
 
 """
-import ctypes
 import random
 import sys
 import threading
@@ -24,8 +23,6 @@ import keyboard
 import mss
 # Título (ou parte do título) da janela do jogo, como aparece na barra de tarefas.
 TITULO_JANELA = "Epic Seven"
-
-TESSERACT_CMD = None
 
 PASTA_TEMPLATES = Path(__file__).parent / "templates"
 
@@ -71,28 +68,14 @@ LIMIAR_MATCH = 0.83
 
 AREA_CLIQUE_SEGURO = (0.72, 0.20, 0.79, 0.90)
 
-CHECAR_RECURSOS = False
-
-METODO_CHECAGEM_RECURSO = "imagem"  # "imagem" ou "ocr"
-
-TEMPLATE_RENOVAR_DESABILITADO = _t("renovar_desabilitado.png")
-TEMPLATES_COMPRAR_DESABILITADO = [
-    _t("item1_comprar_desabilitado.png"),
-    _t("item2_comprar_desabilitado.png"),
-]
-
-REGIAO_GOLD = (0.555, 0.047, 0.675, 0.091)
-REGIAO_GEMAS = (0.675, 0.047, 0.775, 0.091)
-
-CUSTO_RENOVAR_GEMAS = 3
-CUSTO_MAIOR_ITEM_GOLD = 280000
-
 TECLA_CANCELAR = "ctrl+alt+q"
 
 MAX_SCROLLS_PROCURANDO = 2
 
 PAUSA_MIN = 0.1
 PAUSA_MAX = 0.3
+
+CUSTO_RENOVAR_GEMAS = 3
 # =========================================================================
 # INFRAESTRUTURA
 # =========================================================================
@@ -103,6 +86,8 @@ contador_renovacoes = 0
 gold_gasto = 0
 gemas_gastas = 0
 
+motivo_parada = "cancelado"
+
 def pausa_humana(a=PAUSA_MIN, b=PAUSA_MAX):
     time.sleep(random.uniform(a, b))
 
@@ -112,6 +97,58 @@ def registrar_hotkey_cancelamento():
         evento_parar.set()
 
     keyboard.add_hotkey(TECLA_CANCELAR, _cancelar)
+
+def configurar_orcamento() -> dict:
+    def _perguntar(rotulo: str, padrao: int) -> int:
+        while True:
+            entrada = input(f"  {rotulo} [{padrao}]: ").strip()
+            if not entrada:
+                return padrao
+            try:
+                valor = int(entrada)
+                if valor < 0:
+                    raise ValueError
+                return valor
+            except ValueError:
+                print("    Valor inválido. Digite um número inteiro maior ou igual a 0.")
+
+    print("\n=== Configuração de orçamento ===")
+    print("(Enter usa o valor padrão entre colchetes)")
+    gemas_iniciais = _perguntar("Gemas disponíveis", 0)
+    dinheiro_inicial = _perguntar("Dinheiro disponível", 0)
+    limite_gemas = _perguntar("Quanto gastar de gemas (0 = até acabar)", gemas_iniciais)
+    limite_dinheiro = _perguntar("Quanto gastar de dinheiro (0 = até acabar)", dinheiro_inicial)
+    if limite_gemas <= 0:
+        limite_gemas = gemas_iniciais
+    if limite_dinheiro <= 0:
+        limite_dinheiro = dinheiro_inicial
+    if limite_gemas > gemas_iniciais:
+        raise ValueError(
+            f"Erro de orçamento: o limite de gasto de gemas ({limite_gemas}) é maior"
+            f"que as gemas disponíveis ({gemas_iniciais})."
+        )
+    if limite_dinheiro > dinheiro_inicial:
+        raise ValueError(
+            f"Erro de orçamento: o limite gasto de dinheiro"
+            f"({limite_dinheiro:,}) é maior que o dinheiro disponível"
+            f"({dinheiro_inicial:,}).".replace(",",".")
+        )
+    return {
+        "gemas_iniciais": gemas_iniciais,
+        "dinheiro_inicial": dinheiro_inicial,
+        "limite_gemas": limite_gemas,
+        "limite_dinheiro": limite_dinheiro,
+    }
+
+def orcamento_ok(limite_gemas: int, limite_dinheiro: int) -> bool:
+    global motivo_parada
+    if gemas_gastas >= limite_gemas:
+        motivo_parada = "limite de gemas"
+        return False
+    if gold_gasto >= limite_dinheiro:
+        motivo_parada = "limite de dinheiro"
+        return False
+    return True
 
 @dataclass
 class JanelaJogo:
@@ -125,8 +162,6 @@ class JanelaJogo:
         return {"left": self.left, "top": self.top, "width": self.width, "height": self.height}
     
     def prop_para_abs(self, px, py):
-        """Converte coordenadas proporcionais (0-1) da janela em coordenadas
-        absolutas de tela, para usar com pyautogui.click()."""
         return self.left + int(px * self.width), self.top + int(py * self.height)
 
 def localizar_janela_jogo() -> JanelaJogo:
@@ -146,7 +181,6 @@ def localizar_janela_jogo() -> JanelaJogo:
     except Exception as e:
         print(f"[?] Não consegui focar a janela automaticamente ({e}). "
               "Clique manualmente na janela do jogo antes de continuar.")
-
     return JanelaJogo(left=w.left, top=w.top, width=w.width, height=w.height)
 
 def capturar_janela(janela: JanelaJogo) -> np.ndarray:
@@ -170,30 +204,6 @@ def encontrar_template(screenshot: np.ndarray, template: np.ndarray, limiar=LIMI
         return None
     h, w = template.shape[:2]
     return max_loc[0], max_loc[1], w, h, max_val
-
-def ler_numero_regiao(janela: JanelaJogo, regiao_prop) -> int | None:
-    import pytesseract
-    if TESSERACT_CMD:
-        pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
-    x1p, y1p, x2p, y2p = regiao_prop
-    x1, y1 = janela.prop_para_abs(x1p, y1p)
-    x2, y2 = janela.prop_para_abs(x2p, y2p)
-    with mss.mss() as sct:
-        bbox = {"left": x1, "top": y1, "width": max(1, x2 - x1), "height": max(1, y2 - y1)}
-        raw = sct.grab(bbox)
-        img = cv2.cvtColor(np.array(raw), cv2.COLOR_BGRA2GRAY)
-    img = cv2.resize(img, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    _, img_bin = cv2.threshold(img, 150, 255, cv2.THRESH_BINARY)
-    texto = pytesseract.image_to_string(
-        img_bin, config="--psm 7 -c tessedit_char_whitelist=0123456789.,"
-    )
-    texto_limpo = "".join(c for c in texto if c.isdigit())
-    if not texto_limpo:
-        return None
-    try:
-        return int(texto_limpo)
-    except ValueError:
-        return None
 
 PAUSA_CLIQUE_MIN = 0.05
 PAUSA_CLIQUE_MAX = 0.12
@@ -249,9 +259,6 @@ def rolar_para_topo(janela: JanelaJogo, passos=SCROLL_TOPO_PASSOS):
 # LÓGICA PRINCIPAL
 # ========================================================================
 def encontrar_qualquer_template(screenshot: np.ndarray, templates: list, limiar=LIMIAR_MATCH):
-    """Tenta cada template da lista (na ordem) e retorna o primeiro que bater
-    acima do limiar. Usado quando um mesmo botão pode aparecer em mais de um
-    layout (ex.: preço numa linha, ou preço+quantidade em duas linhas)."""
     for template in templates:
         achado = encontrar_template(screenshot, template, limiar)
         if achado:
@@ -260,9 +267,7 @@ def encontrar_qualquer_template(screenshot: np.ndarray, templates: list, limiar=
 
 FAIXA_MESMA_LINHA_PROP = 1.6
 
-def encontrar_template_na_mesma_linha(screenshot: np.ndarray, template: np.ndarray, y_centro: float,
-                                       altura_ref: float, limiar=LIMIAR_MATCH):
-
+def encontrar_template_na_mesma_linha(screenshot: np.ndarray, template: np.ndarray, y_centro: float, altura_ref: float, limiar=LIMIAR_MATCH):
     altura_total = screenshot.shape[0]
     metade_faixa = (altura_ref * FAIXA_MESMA_LINHA_PROP) / 2
     y0 = max(0, int(y_centro - metade_faixa))
@@ -274,44 +279,14 @@ def encontrar_template_na_mesma_linha(screenshot: np.ndarray, template: np.ndarr
     if achado is None:
         return None
     x, y, w, h, conf = achado
-    return x, y + y0, w, h, conf  # devolve em coordenadas do screenshot original
+    return x, y + y0, w, h, conf
 
-def encontrar_qualquer_template_na_mesma_linha(screenshot: np.ndarray, templates: list, y_centro: float,
-                                                altura_ref: float, limiar=LIMIAR_MATCH):
+def encontrar_qualquer_template_na_mesma_linha(screenshot: np.ndarray, templates: list, y_centro: float, altura_ref: float, limiar=LIMIAR_MATCH):
     for template in templates:
         achado = encontrar_template_na_mesma_linha(screenshot, template, y_centro, altura_ref, limiar)
         if achado:
             return achado
     return None
-
-def checar_recursos_suficientes_por_ocr(janela: JanelaJogo) -> bool:
-    gemas = ler_numero_regiao(janela, REGIAO_GEMAS)
-    gold = ler_numero_regiao(janela, REGIAO_GOLD)
-    if gemas is not None and gemas < CUSTO_RENOVAR_GEMAS:
-        print(f"[!] Gemas insuficientes ({gemas}). Parando.")
-        return False
-    if gold is not None and gold < CUSTO_MAIOR_ITEM_GOLD:
-        print(f"[!] Gold insuficiente ({gold}). Parando.")
-        return False
-    if gemas is None and gold is None:
-        print("[?] Não consegui ler gemas/gold nessa rodada (OCR falhou). Continuando mesmo assim.")
-    return True
-
-def checar_recursos_suficientes_por_imagem(
-    janela: JanelaJogo,
-    templates_comprar_desabilitado: list,
-    template_renovar_desabilitado: np.ndarray | None,
-) -> bool:
-    screenshot = capturar_janela(janela)
-    for template in templates_comprar_desabilitado:
-        if template is not None and encontrar_template(screenshot, template):
-            print("[!] Um botão de comprar está desabilitado (sem gold suficiente). Parando.")
-            return False
-    if template_renovar_desabilitado is not None:
-        if encontrar_template(screenshot, template_renovar_desabilitado):
-            print("[!] Botão de renovar loja está desabilitado (sem gemas suficientes). Parando.")
-            return False
-    return True
 
 def tentar_comprar_item(janela: JanelaJogo, item: ItemDeCompra, template_confirmar) -> bool:
     screenshot = capturar_janela(janela)
@@ -365,8 +340,6 @@ def renovar_loja(janela: JanelaJogo, template_renovar, template_confirmar) -> bo
     return True
 
 def procurar_e_comprar(janela: JanelaJogo, itens: list, template_confirmar) -> set:
-    """Rola a tela procurando os itens configurados. Retorna o conjunto de
-    índices de itens que foram comprados nesta passada."""
     global contador_compras, gold_gasto
     comprados = set()
     rolar_para_topo(janela)
@@ -407,43 +380,12 @@ def loop_principal():
     template_confirmar = None
     if TEMPLATE_CONFIRMAR.exists():
         template_confirmar = carregar_template(TEMPLATE_CONFIRMAR)
-    templates_comprar_desabilitado = []
-    template_renovar_desabilitado = None
-    if CHECAR_RECURSOS and METODO_CHECAGEM_RECURSO == "imagem":
-        for caminho in TEMPLATES_COMPRAR_DESABILITADO:
-            if caminho.exists():
-                templates_comprar_desabilitado.append(carregar_template(caminho))
-        if TEMPLATE_RENOVAR_DESABILITADO.exists():
-            template_renovar_desabilitado = carregar_template(TEMPLATE_RENOVAR_DESABILITADO)
-        if not templates_comprar_desabilitado and not template_renovar_desabilitado:
-            raise RuntimeError(
-                "CHECAR_RECURSOS = True e METODO_CHECAGEM_RECURSO = 'imagem' mas "
-                "nenhum template de botão desabilitado foi encontrado em "
-                "templates/. Crie pelo menos um (ex.: item1_comprar_desabilitado.png "
-                "ou renovar_desabilitado.png), troque METODO_CHECAGEM_RECURSO para "
-                "'ocr', ou deixe CHECAR_RECURSOS = False."
-            )
-        
-    def recursos_ok():
-        if not CHECAR_RECURSOS:
-            return True
-        if METODO_CHECAGEM_RECURSO == "imagem":
-            return checar_recursos_suficientes_por_imagem(
-                janela, templates_comprar_desabilitado, template_renovar_desabilitado
-            )
-        return checar_recursos_suficientes_por_ocr(janela)
     registrar_hotkey_cancelamento()
     print(f"Pressione {TECLA_CANCELAR} a qualquer momento para cancelar.")
-    if not CHECAR_RECURSOS:
-        print("[!] CHECAR_RECURSOS = False — o bot NÃO vai parar sozinho por falta de "
-              "gemas/gold. Só para pelo Ctrl+Alt+Q (ou o que estiver em TECLA_CANCELAR) "
-              "ou Ctrl+C. Fique de olho.")
     print("Iniciando em 3 segundos — deixe a janela do jogo em foco...")
     time.sleep(3)
     itens_ja_comprados_nesta_rodada_de_loja = set()
     while not evento_parar.is_set():
-        if not recursos_ok():
-            break
         clique_aleatorio_seguro(janela)
         pausa_humana()
         if evento_parar.is_set():
@@ -456,13 +398,10 @@ def loop_principal():
             print("[*] Os itens configurados já foram comprados nesta rotação da loja. Renovando...")
         else:
             print("[*] Item(ns) não encontrado(s) na loja atual. Renovando...")
-        if not recursos_ok():
-            break
         if not renovar_loja(janela, template_renovar, template_confirmar):
             print("[!] Falha ao renovar a loja. Parando por segurança.")
             break
         contador_renovacoes += 1
-        gemas_gastas += CUSTO_RENOVAR_GEMAS
         itens_ja_comprados_nesta_rodada_de_loja.clear()
         pausa_humana(1.0, 1.8)
     total_itens = sum(contador_compras.values())
@@ -478,6 +417,7 @@ def loop_principal():
         print("  (nenhum item comprado)")
     print("==============================\n")
     print("Bot finalizado.")
+    
 if __name__ == "__main__":
     try:
         loop_principal()
