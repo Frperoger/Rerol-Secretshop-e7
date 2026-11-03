@@ -1,6 +1,6 @@
-opencv-python
-numpy
-pyautogui
-pygetwindow
-mss
-keyboard
+PySide6>=6.6,<7
+opencv-python-headless>=4.8,<5
+numpy>=1.26,<3
+pyautogui>=0.9.54,<1
+mss>=9,<11
+keyboard>=0.13.5,<1

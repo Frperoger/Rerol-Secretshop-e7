@@ -1,0 +1,77 @@
+
+# ==========================================
+# Epic7 Shop Bot v2 - Git Ignore
+# ==========================================
+
+# Python - ambientes virtuais
+.venv/
+venv/
+env/
+
+# Python - cache e compilados
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+
+# Build e distribuição
+build/
+dist/
+*.exe
+*.msi
+*.whl
+*.egg-info/
+
+# Logs e relatórios gerados
+*.log
+logs/
+reports/
+relatorios/
+
+# Configurações pessoais e estado local
+.env
+.env.*
+!.env.example
+config.local.json
+settings.local.json
+session.json
+state.json
+history.json
+historico.json
+
+# Capturas e diagnósticos gerados
+screenshots/
+captures/
+debug/
+diagnostics/
+diagnosticos/
+
+# Arquivos temporários
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# IDE e editor
+.vscode/
+.idea/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Instaladores e pacotes locais
+*.zip
+*.7z
+*.rar
