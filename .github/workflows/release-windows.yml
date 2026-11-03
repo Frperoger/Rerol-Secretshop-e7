@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Baixar o código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configurar Python 3.11
         uses: actions/setup-python@v6
@@ -77,7 +77,7 @@ jobs:
           Write-Host "Pacote criado: $zip"
 
       - name: Disponibilizar build na aba Actions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Epic7ShopBot-Windows-${{ github.run_number }}
           path: |
