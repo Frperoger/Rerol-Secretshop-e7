@@ -1,32 +1,59 @@
-# Epic7 Shop Bot — interface desktop segura (v2)
+# Epic Seven — Secret Shop Reroll Bot (v2)
 
-Projeto refatorado a partir do [script original](https://github.com/Frperoger/Rerol-Secretshop-e7).
+[Português](#português) | [English](#english)
 
-## Requisitos
+## Português
 
-- Jogo aberto e visível na resolução em que os templates foram capturados.
-- A pasta original `templates/` deve permanecer na raiz do repositório (o pacote de atualização não inclui as imagens, porque elas já existem no GitHub).
+Aplicativo desktop com interface gráfica para automatizar a busca de itens na Loja Secreta do **Epic Seven**.
 
-## Segurança / como o bot opera
+### Recursos
 
-- **Sem privilégios elevados por padrão:** não há UAC forçado. Se o emulador estiver em contexto elevado, a entrada simulada poderá não funcionar; utilize o mesmo nível de privilégios apenas quando estritamente necessário.
-- **FailSafe do PyAutoGUI permanece ativo:** mover o cursor para um canto de tela pode provocar a parada automática.
-- **HWND rigoroso:** checa que a janela é a mesma, está em primeiro plano, não foi movida/redimensionada e que o ponto de clique está nela (`WindowFromPoint`), inclusive **depois do movimento do cursor**.
-- **Perda de foco:** pausa por até 30 segundos (configurável); recomeça a varredura sem renovar a loja. Não clica em outras janelas.
-- **Cancelamento:** `Ctrl+Alt+Q` enquanto o aplicativo está aberto (quando disponível), botão Parar no painel ou no menu da bandeja. Se o sistema bloquear o atalho global, use o menu da bandeja.
-- **Compra:** só contabiliza como *verificada visualmente* quando a modal de preço apareceu, foi confirmada e o botão de compra correspondente deixou de ser detectado na mesma linha (ou há template opcional de estado vendido). A detecção não equivale à conferência do saldo real.
-- **Resultado incerto:** se uma ação potencialmente irreversível começou e não foi possível verificar o estado, **o loop para imediatamente**. Os gastos associados podem não aparecer nos totais estimados. Confira manualmente o jogo antes de reiniciar.
-- **Renovação:** exige visualização da modal de confirmação, clique nela e desaparecimento da modal.
-- **Diagnóstico de reconhecimento:** na aba Calibração, selecione uma captura PNG da loja. Mostra contornos do ícone/botão, sem automação do mouse.
+- Interface gráfica para iniciar, acompanhar e parar a automação.
+- Reconhecimento de itens por imagens (`templates/`).
+- Verificações de foco da janela e interrupção em situações incertas.
+- Ferramentas de calibração e diagnóstico de imagens.
 
-**Importante:** esta versão foi desenhada para falhar com segurança, mesmo que isso resulte em mais interrupções por confirmação inconclusiva. Para melhorar a confirmação das compras, cada item pode apontar para um PNG opcional de estado `Vendido`, salvo na pasta de templates.
+### Como executar
 
-### Direitos autorais e licença
+**Pelo Release (mais simples):** baixe a versão compilada na seção [Releases](https://github.com/Frperoger/Rerol-Secretshop-e7/releases), extraia os arquivos caso necessário e execute o aplicativo (`.exe`) diretamente. Não é necessário instalar Python nem executar o código-fonte.
 
-Copyright © 2026 [Nome do titular]. Todos os direitos reservados.
+**Pelo código-fonte:**
 
-O Rerol-Secretshop-e7 é um software independente, disponibilizado gratuitamente para uso pessoal, conforme os termos do arquivo LICENSE.
+1. Instale o Python e as dependências: `pip install -r requirements.txt`.
+2. Abra o jogo e mantenha sua janela visível.
+3. Execute `python main.py` ou use `iniciar_gui.bat` no Windows.
+4. Configure o aplicativo e inicie a automação pela interface.
 
-É proibida a venda, comercialização, distribuição remunerada ou exploração comercial do software sem autorização prévia e expressa do titular dos direitos.
+Para testar o código: `pip install -r requirements-dev.txt` e `python -m pytest -q`.
 
-Este projeto não possui vínculo oficial com a Smilegate ou com os responsáveis pelo jogo Epic Seven.
+**Atenção:** monitore a execução e confirme compras e gastos diretamente no jogo. A automação pode parar quando não conseguir verificar uma ação com segurança.
+
+**Aviso:** projeto gratuito, independente e não oficial. Não possui vínculo com os responsáveis por Epic Seven. Verifique os termos de uso do jogo antes de utilizar automações.
+
+## English
+
+Desktop application with a graphical interface for automating item searches in the **Epic Seven** Secret Shop.
+
+### Features
+
+- GUI to start, monitor, and stop automation.
+- Image-based item recognition (`templates/`).
+- Window-focus checks and safe stops when an action cannot be verified.
+- Image calibration and diagnostic tools.
+
+### How to run
+
+**From a Release (easiest):** download the packaged version from [Releases](https://github.com/Frperoger/Rerol-Secretshop-e7/releases), extract the files if needed, and run the application (`.exe`) directly. You do not need to install Python or run the source code.
+
+**From source:**
+
+1. Install Python and the dependencies: `pip install -r requirements.txt`.
+2. Open the game and keep its window visible.
+3. Run `python main.py`, or use `iniciar_gui.bat` on Windows.
+4. Configure the application and start automation from the GUI.
+
+To run tests: `pip install -r requirements-dev.txt` and `python -m pytest -q`.
+
+**Caution:** supervise execution and verify purchases and spending in the game. Automation may stop if an action cannot be confirmed safely.
+
+**Disclaimer:** free, independent, unofficial project. Not affiliated with the creators or publishers of Epic Seven. Review the game's terms before using automation.
