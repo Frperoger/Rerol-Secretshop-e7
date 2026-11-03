@@ -2,6 +2,7 @@
 from __future__ import annotations
 import logging
 import threading
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -19,19 +20,89 @@ class BotRunner:
     def __init__(self, config: AppConfig, templates_dir: Path,
                  on_log: Callable = _noop, on_status: Callable = _noop,
                  on_finished: Callable = _noop, driver_factory=None):
-        self.config = config
+        self.config = deepcopy(config)
+        self._live_lock = threading.RLock()
+        self._live_budget = deepcopy(config.budget)
+        self._active_items = {it.id: it.enabled for it in config.items}
         self.templates_dir = Path(templates_dir)
         self.on_log, self.on_status, self.on_finished = on_log, on_status, on_finished
         self._driver_factory = driver_factory
         self.stop_event = threading.Event()
+        self._ui_pause_event = threading.Event()
+        self._pause_ack = threading.Event()
         self.state = RunState()
         self._lock = threading.Lock()
         self._running = False
+        self._driver = None
 
     @property
     def is_running(self):
         with self._lock:
             return self._running
+
+    def update_budget(self, budget):
+        """Aplica novo teto entre ações; rejeita limites abaixo do gasto já estimado.
+
+        Não altera preço de compra/renovação no meio da execução.
+        """
+        new_budget = deepcopy(budget)
+        with self._live_lock:
+            probe = deepcopy(self.config)
+            probe.budget = new_budget
+            validate_config(probe)
+            gems = new_budget.gems_limit or new_budget.gems_available
+            gold = new_budget.gold_limit or new_budget.gold_available
+            if gems < self.state.gems_estimated or gold < self.state.gold_estimated:
+                raise BotError("Novo limite inferior ao gasto já estimado na execução.")
+            if new_budget.refresh_cost != self.config.budget.refresh_cost:
+                raise BotError("Custo por renovação só pode ser alterado com o bot parado.")
+            self._live_budget = new_budget
+        self.log(f"Orçamento atualizado: gemas até {gems}; ouro até {gold}.", "info")
+        self.notify(self.state.status)
+
+    def set_item_enabled(self, item_id: str, enabled: bool):
+        with self._live_lock:
+            if item_id not in self._active_items:
+                raise BotError(f"Item desconhecido: {item_id}")
+            item = next(it for it in self.config.items if it.id == item_id)
+            if enabled and self._driver is not None and hasattr(self._driver, "supports_item"):
+                if not self._driver.supports_item(item):
+                    raise BotError(f"Templates de {item_id} não foram carregados. "
+                                   "Corrija os PNGs e reinicie a execução.")
+            self._active_items[item_id] = bool(enabled)
+        self.log(f"Busca por {item_id}: {'ativada' if enabled else 'desativada'}. ")
+        self.notify(self.state.status)
+
+    def active_items(self):
+        with self._live_lock:
+            return [it for it in self.config.items if self._active_items.get(it.id, False)]
+
+    def limits(self):
+        with self._live_lock:
+            b = self._live_budget
+            return (b.gems_limit or b.gems_available, b.gold_limit or b.gold_available)
+
+    def set_ui_paused(self, paused: bool):
+        # Solicita uma pausa cooperativa; não anuncia pausa até o motor chegar
+        # a um ponto seguro, pois abrir a UI durante um clique criaria incerteza.
+        if paused:
+            self._ui_pause_event.set()
+        else:
+            self._ui_pause_event.clear()
+
+    def pause_acknowledged(self) -> bool:
+        return self._pause_ack.is_set()
+
+    def _wait_ui_resume(self):
+        if self._ui_pause_event.is_set():
+            self._pause_ack.set()
+            self.notify("pausado_configuracao")
+        while self._ui_pause_event.is_set():
+            self.check_stop()
+            self.stop_event.wait(0.15)
+        if self._pause_ack.is_set():
+            self._pause_ack.clear()
+            self.notify("executando")
 
     def stop(self):
         self.stop_event.set()
@@ -63,6 +134,10 @@ class BotRunner:
         limit = self.config.calibration.focus_timeout
         while waited < limit:
             self.check_stop()
+            if self._ui_pause_event.is_set():
+                self._wait_ui_resume()
+                waited = 0.0
+                self.notify("pausado_por_foco")
             try:
                 driver.ensure_focus()
                 self.log("Foco recuperado; reiniciando varredura da loja.", "info")
@@ -74,16 +149,20 @@ class BotRunner:
         raise BotError(f"Foco não retornou em {limit:.0f}s; operação encerrada.")
 
     def _scan_shop(self, driver, gold_limit: int):
-        items = [it for it in self.config.items if it.enabled]
         driver.scroll_top()
         self.pause(0.05, 0.15)
         for scroll in range(self.config.calibration.max_scrolls + 1):
             self.check_stop()
-            for item in items:
+            self._wait_ui_resume()
+            for item in self.active_items():
                 self.check_stop()
+                self._wait_ui_resume()
                 if item.id in self.state.purchased_in_rotation:
                     continue
-                if not can_purchase(item.price_gold, self.state, gold_limit):
+                # Reconfere estado após receber alterações da UI.
+                if item not in self.active_items():
+                    continue
+                if not can_purchase(item.price_gold, self.state, self.limits()[1]):
                     continue
                 if driver.try_purchase(item):
                     self.state.purchased_in_rotation.add(item.id)
@@ -93,20 +172,26 @@ class BotRunner:
                         self.state.purchases_by_item.get(item.name, 0) + 1)
                     self.log(f"[{item.name}] Compra verificada na interface; custo estimado {item.price_gold:,} ouro.", "ok")
                     self.notify("executando")
-            if len(self.state.purchased_in_rotation) == len(items):
+            if not any(it.id not in self.state.purchased_in_rotation for it in self.active_items()):
                 break
             if scroll < self.config.calibration.max_scrolls:
+                self._wait_ui_resume()
                 driver.scroll_down()
                 self.pause(0.05, 0.15)
 
     def _loop(self, driver, gems_limit: int, gold_limit: int):
-        enabled = [item for item in self.config.items if item.enabled]
         while True:
             self.check_stop()
+            self._wait_ui_resume()
+            # Todos desativados: permanece aguardando sem clicar nem renovar.
+            if not self.active_items():
+                self.notify("pausado_sem_itens")
+                self.pause(0.15)
+                continue
             try:
                 driver.ensure_focus()
-                if not any(can_purchase(item.price_gold, self.state, gold_limit)
-                           for item in enabled):
+                if not any(can_purchase(item.price_gold, self.state, self.limits()[1])
+                           for item in self.active_items()):
                     self.state.reason = "ouro insuficiente para todos os itens ativos"
                     return
                 self.log("Procurando itens na loja atual…")
@@ -114,13 +199,21 @@ class BotRunner:
                 self.pause(self.config.calibration.pause_min, self.config.calibration.pause_max)
                 self._scan_shop(driver, gold_limit)
                 self.check_stop()
-                if not any(can_purchase(item.price_gold, self.state, gold_limit)
-                           for item in enabled):
+                if not self.active_items():
+                    continue
+                if not any(can_purchase(item.price_gold, self.state, self.limits()[1])
+                           for item in self.active_items()):
                     self.state.reason = "limite de ouro / saldo insuficiente"
                     return
-                if not can_refresh(self.config.budget.refresh_cost, self.state, gems_limit):
+                if not can_refresh(self.config.budget.refresh_cost, self.state, self.limits()[0]):
                     self.state.reason = "limite de gemas para renovar"
                     return
+                self._wait_ui_resume()
+                if not self.active_items():
+                    continue
+                # Reconfere orçamento após eventual atualização da UI.
+                if not can_refresh(self.config.budget.refresh_cost, self.state, self.limits()[0]):
+                    continue
                 self.log("Solicitando renovação da loja…")
                 driver.refresh()
                 self.state.gems_estimated += self.config.budget.refresh_cost
@@ -140,7 +233,7 @@ class BotRunner:
             self._running = True
         self.state = RunState()
         try:
-            limits = validate_config(self.config)
+            validate_config(self.config)
             self.notify("preparando")
             self.log("Conferindo templates e janela…")
             if self._driver_factory is None:
@@ -150,10 +243,11 @@ class BotRunner:
                 factory = self._driver_factory
             driver = factory(self.config, self.templates_dir, self.check_stop, self.pause, self.log)
             driver.prepare()
+            self._driver = driver
             self.log("Automação inicializa em 2 segundos. Mantenha a loja visível.")
             self.pause(2.0)
             self.notify("executando")
-            self._loop(driver, *limits)
+            self._loop(driver, *self.limits())
             self.state.status = "concluido"
         except StopRequested:
             self.state.status = "cancelado"

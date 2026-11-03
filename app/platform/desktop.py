@@ -29,10 +29,15 @@ class DesktopIO:
         required = {"renovar.png", "confirmar.png"}
         optional = set()
         for item in self.config.items:
+            # Carrega os PNGs também de itens desativados para permitir ativá-los
+            # enquanto o motor está em execução, sem reiniciar a sessão.
+            names = (item.icon_template, item.buy_template, item.price_template)
             if item.enabled:
-                required.update((item.icon_template, item.buy_template, item.price_template))
-                if item.sold_template:
-                    optional.add(item.sold_template)
+                required.update(names)
+            else:
+                optional.update(name for name in names if name)
+            if item.sold_template:
+                optional.add(item.sold_template)
         missing = [f for f in sorted(required) if not (self.templates_dir / f).is_file()]
         if missing:
             raise BotError("Templates ausentes em " + str(self.templates_dir) + ": " + ", ".join(missing))
@@ -52,6 +57,10 @@ class DesktopIO:
         self.api = Win32()
         self.target = TargetWindow.locate(self.api, self.config.calibration.window_title)
         self.log(f"Janela localizada: HWND={self.target.hwnd}", "info")
+
+    def supports_item(self, item):
+        return all(name in self.templates for name in (
+            item.icon_template, item.buy_template, item.price_template))
 
     def ensure_focus(self):
         self.stop_check()
@@ -195,11 +204,17 @@ class DesktopIO:
             raise
 
     def refresh(self) -> None:
-        self.scroll_top()
-        self.pause(0.1, 0.2)
-        renew = self.wait_match("renovar.png", self.config.calibration.modal_timeout)
+        # A UI pode exibir Renovar em posições diferentes conforme a rolagem.
+        # Não role antes de verificar a tela atual.
+        renew = self.wait_match("renovar.png", 0.5)
         if renew is None:
-            raise BotError("Botão de renovar não encontrado; nenhuma gema contabilizada.")
+            self.scroll_top()
+            self.pause(0.1, 0.2)
+            renew = self.wait_match("renovar.png", self.config.calibration.modal_timeout)
+        if renew is None:
+            raise BotError("Botão Renovar não encontrado antes nem depois da rolagem. "
+                           "Use Calibração > Diagnóstico para medir a confiança do renovar.png; "
+                           "confira zoom, idioma e recorte da imagem.")
         committed = False
         try:
             committed = True  # pode haver cancelamento entre mouseDown e mouseUp

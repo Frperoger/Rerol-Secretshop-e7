@@ -90,7 +90,67 @@ def read_history(path: Path | None = None, limit: int = 100) -> list[dict]:
     results = []
     for line in path.read_text(encoding="utf-8").splitlines():
         try:
-            results.append(json.loads(line))
+            record = json.loads(line)
         except json.JSONDecodeError:
             continue  # isolamos registros individuais incompletos
+        if isinstance(record, dict):
+            results.append(record)
     return results[-limit:][::-1]
+
+
+def remove_history_rows(rows: set[int] | list[int], path: Path | None = None,
+                        limit: int = 100) -> int:
+    """Remove linhas visíveis no relatório, sem apagar registros antigos/ilegíveis.
+
+    A tabela exibe as últimas ``limit`` entradas JSON válidas em ordem reversa.
+    Mapeamos os índices visíveis às linhas físicas do arquivo e regravamos
+    atomicamente o JSONL para manter todos os demais registros intactos.
+    """
+    path = Path(path or (data_directory() / "history.jsonl"))
+    if not path.exists() or not rows:
+        return 0
+    selected = set(rows)
+    if any(type(row) is not int or row < 0 for row in selected):
+        raise ValueError("Seleção inválida do histórico.")
+    raw_lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    valid_physical_rows = []
+    for index, raw in enumerate(raw_lines):
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            valid_physical_rows.append(index)
+    visible = valid_physical_rows[-limit:][::-1]
+    to_delete = {visible[index] for index in selected if index < len(visible)}
+    if not to_delete:
+        return 0
+    fd, temporary = tempfile.mkstemp(prefix=".history-", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as output:
+            output.writelines(line for index, line in enumerate(raw_lines)
+                              if index not in to_delete)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return len(to_delete)
+
+
+def clear_history(path: Path | None = None) -> int:
+    """Exclui todo o histórico salvo; retorna a quantidade de registros JSON."""
+    path = Path(path or (data_directory() / "history.jsonl"))
+    if not path.exists():
+        return 0
+    lines = path.read_text(encoding="utf-8").splitlines()
+    count = 0
+    for line in lines:
+        try:
+            if isinstance(json.loads(line), dict):
+                count += 1
+        except json.JSONDecodeError:
+            pass
+    path.unlink()
+    return count

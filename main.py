@@ -11,10 +11,15 @@ def main():
     except OSError:
         pass  # log visual continua disponível mesmo se AppData não permitir escrita
     from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QIcon
+    from app.config import bundled_root
     from app.ui.main_window import MainWindow
     from app.ui.style import QSS
     app = QApplication(sys.argv)
     app.setApplicationName("Epic7 Shop Bot")
+    icon = bundled_root() / "assets" / "app_icon.png"
+    if icon.exists():
+        app.setWindowIcon(QIcon(str(icon)))
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(QSS)
     window = MainWindow()

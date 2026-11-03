@@ -16,8 +16,8 @@ QPushButton:hover {border-color:#52a8ff;}
 QPushButton:disabled {color:#696969; background:#262626;}
 QPushButton#Primary {background:#177ddc; border-color:#177ddc; font-weight:600;}
 QPushButton#Danger {background:#a61d24; border-color:#a61d24; font-weight:600;}
-QLineEdit,QSpinBox,QDoubleSpinBox {border:1px solid #404040; background:#292929; padding:6px 8px; border-radius:4px; selection-background-color:#177ddc;}
-QLineEdit:focus,QSpinBox:focus,QDoubleSpinBox:focus {border-color:#52a8ff;}
+QLineEdit,QSpinBox,QDoubleSpinBox,QKeySequenceEdit {border:1px solid #404040; background:#292929; padding:6px 8px; border-radius:4px; selection-background-color:#177ddc;}
+QLineEdit:focus,QSpinBox:focus,QDoubleSpinBox:focus,QKeySequenceEdit:focus {border-color:#52a8ff;}
 QPlainTextEdit {background:#0d0d0d; border:1px solid #363636; border-radius:5px; font: 9pt Consolas;}
 QTableWidget {background:#1b1b1b; alternate-background-color:#252525; gridline-color:#383838; border:1px solid #383838;}
 QHeaderView::section {background:#2b2b2b; color:#c2c2c2; border:0; border-bottom:1px solid #3b3b3b; padding:8px;}

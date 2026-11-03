@@ -1,0 +1,58 @@
+{
+  "budget": {
+    "gems_available": 60,
+    "gold_available": 2000000,
+    "gems_limit": 30,
+    "gold_limit": 1000000,
+    "refresh_cost": 3
+  },
+  "calibration": {
+    "window_title": "Epic Seven",
+    "hotkey": "ctrl+shift+f8",
+    "threshold": 0.83,
+    "max_scrolls": 2,
+    "same_row_factor": 1.6,
+    "pause_min": 0.1,
+    "pause_max": 0.3,
+    "safe_area": [
+      0.72,
+      0.2,
+      0.79,
+      0.9
+    ],
+    "focus_timeout": 30.0,
+    "modal_timeout": 2.5,
+    "auto_overlay": true,
+    "overlay_area": [
+      0.02,
+      0.025,
+      0.33,
+      0.245
+    ]
+  },
+  "items": [
+    {
+      "id": "item1",
+      "name": "Medalhas Místicas",
+      "price_gold": 184000,
+      "enabled": true,
+      "lower_half": true,
+      "icon_template": "item1_icone.png",
+      "buy_template": "item1_comprar_qtd.png",
+      "price_template": "item1_comprar_preco.png",
+      "sold_template": ""
+    },
+    {
+      "id": "item2",
+      "name": "Item 2",
+      "price_gold": 280000,
+      "enabled": true,
+      "lower_half": true,
+      "icon_template": "item2_icone.png",
+      "buy_template": "item2_comprar_qtd.png",
+      "price_template": "item2_comprar_preco.png",
+      "sold_template": ""
+    }
+  ],
+  "templates_dir": ""
+}

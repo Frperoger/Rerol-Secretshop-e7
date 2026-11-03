@@ -71,6 +71,8 @@ class CalibrationConfig:
     safe_area: tuple[float, float, float, float] = (0.72, 0.20, 0.79, 0.90)
     focus_timeout: float = 30.0
     modal_timeout: float = 2.5
+    auto_overlay: bool = False
+    overlay_area: tuple[float, float, float, float] = (0.02, 0.025, 0.33, 0.245)
 
 
 @dataclass
@@ -91,6 +93,8 @@ class AppConfig:
         cal = dict(data.get("calibration", {}))
         if "safe_area" in cal:
             cal["safe_area"] = tuple(cal["safe_area"])
+        if "overlay_area" in cal:
+            cal["overlay_area"] = tuple(cal["overlay_area"])
         items = [ItemConfig(**d) for d in data.get("items", [])]
         return cls(budget=BudgetConfig(**data.get("budget", {})),
                    calibration=CalibrationConfig(**cal),

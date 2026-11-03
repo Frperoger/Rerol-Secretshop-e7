@@ -2,6 +2,8 @@
 import math
 import re
 from app.models import AppConfig, BotError, RunState
+from app.core.hotkeys import normalize_hotkey
+from app.core.overlay_geometry import validate_overlay_area, rectangles_overlap
 
 
 _ID = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -21,6 +23,7 @@ def validate_config(cfg: AppConfig) -> tuple[int, int]:
         raise BotError("O limite de gastos não pode superar o saldo disponível.")
     if not c.window_title.strip() or not c.hotkey.strip():
         raise BotError("Título da janela e tecla de emergência são obrigatórios.")
+    normalize_hotkey(c.hotkey)
     numeric = (c.threshold, c.same_row_factor, c.pause_min, c.pause_max,
                c.focus_timeout, c.modal_timeout)
     if any(not isinstance(v, (float, int)) or not math.isfinite(v) for v in numeric):
@@ -40,6 +43,11 @@ def validate_config(cfg: AppConfig) -> tuple[int, int]:
         raise BotError("Área segura com valores inválidos.")
     if not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
         raise BotError("Área segura deve ser um retângulo válido dentro da janela.")
+    if not isinstance(c.auto_overlay, bool):
+        raise BotError("Modo de acompanhamento deve ser ligado ou desligado.")
+    validate_overlay_area(c.overlay_area)
+    if c.auto_overlay and rectangles_overlap(c.overlay_area, c.safe_area):
+        raise BotError("Área azul do pop-up sobrepõe a área segura verde. Separe as regiões.")
     if not cfg.items or not any(item.enabled for item in cfg.items):
         raise BotError("Ative ao menos um item para comprar.")
     ids = set()
