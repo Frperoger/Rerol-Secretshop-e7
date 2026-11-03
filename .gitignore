@@ -26,6 +26,7 @@ htmlcov/
 # Build e distribuição
 build/
 dist/
+__pycache__
 *.exe
 *.msi
 *.whl
