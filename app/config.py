@@ -10,6 +10,7 @@ from pathlib import Path
 
 from app.models import AppConfig, BotError
 from app.core.budget import validate_config
+from app.core.template_scale import MIN_SCALE, MAX_SCALE
 
 
 def data_directory() -> Path:
@@ -27,18 +28,39 @@ def config_path() -> Path:
 
 def save_config(cfg: AppConfig, path: Path | None = None) -> None:
     validate_config(cfg)
-    path = Path(path or config_path())
+    _write_json(Path(path or config_path()), cfg.to_dict())
+
+
+def _write_json(path: Path, payload) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=".config-", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
-            json.dump(cfg.to_dict(), output, ensure_ascii=False, indent=2)
+            json.dump(payload, output, ensure_ascii=False, indent=2)
             output.flush()
             os.fsync(output.fileno())
         os.replace(name, path)
     finally:
         if os.path.exists(name):
             os.unlink(name)
+
+
+def _template_scale_path(key: str) -> Path:
+    return data_directory() / "escalas_templates" / f"{key}.json"
+
+
+def load_template_scale(key: str) -> float | None:
+    try:
+        value = json.loads(_template_scale_path(key).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return value if type(value) in (int, float) and MIN_SCALE <= value <= MAX_SCALE else None
+
+
+def save_template_scale(key: str, scale: float) -> None:
+    if not MIN_SCALE <= scale <= MAX_SCALE:
+        raise ValueError("Escala de template fora do intervalo de calibração.")
+    _write_json(_template_scale_path(key), scale)
 
 
 def load_config(path: Path | None = None) -> AppConfig:

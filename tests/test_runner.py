@@ -19,7 +19,6 @@ class FakeDesktop:
             self.lost_focus_once = False
             raise FocusLost("simulado")
     def click_safe(self): pass
-    def scroll_top(self): pass
     def scroll_down(self): self.scrolls += 1
     def try_purchase(self, item):
         if self.fail_buy:

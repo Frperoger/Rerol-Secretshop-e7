@@ -20,12 +20,12 @@ def test_same_row_rejects_different_row():
     frame = rng.integers(0, 255, size=(160, 200, 3), dtype=np.uint8)
     icon = Match(10, 20, 20, 20, .99)
     button = frame[120:134, 140:170].copy()
-    assert same_row(frame, button, icon, .99, 1.6) is None
+    assert same_row(frame, button, icon, .99) is None
 
 
 def test_uniform_image_not_matched():
     frame = np.zeros((40, 40, 3), dtype=np.uint8)
-    tpl = np.zeros((10, 10, 3), dtype=np.uint8)
+    tpl = np.full((10, 10, 3), (32, 100, 200), dtype=np.uint8)
     assert detect(frame, tpl) is None
 
 

@@ -24,12 +24,11 @@ def validate_config(cfg: AppConfig) -> tuple[int, int]:
     if not c.window_title.strip() or not c.hotkey.strip():
         raise BotError("Título da janela e tecla de emergência são obrigatórios.")
     normalize_hotkey(c.hotkey)
-    numeric = (c.threshold, c.same_row_factor, c.pause_min, c.pause_max,
-               c.focus_timeout, c.modal_timeout)
+    numeric = (c.threshold, c.pause_min, c.pause_max, c.focus_timeout, c.modal_timeout)
     if any(not isinstance(v, (float, int)) or not math.isfinite(v) for v in numeric):
         raise BotError("Calibração contém valores não numéricos ou infinitos.")
-    if not 0.6 <= c.threshold <= 0.99 or not 1.0 <= c.same_row_factor <= 3.0:
-        raise BotError("Limiar de detecção ou faixa da mesma linha inválidos.")
+    if not 0.6 <= c.threshold <= 0.99:
+        raise BotError("Limiar de detecção inválido.")
     if type(c.max_scrolls) is not int or not 0 <= c.max_scrolls <= 8:
         raise BotError("Máximo de rolagens deve estar entre 0 e 8.")
     if not 0 <= c.pause_min <= c.pause_max <= 10 or not 1 <= c.focus_timeout <= 300:

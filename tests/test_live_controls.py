@@ -1,7 +1,9 @@
 """Estados concorrentes, limites e ativação em execução (sem Qt/Windows)."""
 import threading
 import time
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -22,7 +24,6 @@ def runner_with_fake(cfg=None):
         def prepare(self): pass
         def ensure_focus(self): pass
         def click_safe(self): pass
-        def scroll_top(self): pass
         def scroll_down(self): pass
         def supports_item(self, item):
             return item.id != "item2"
@@ -65,6 +66,53 @@ def test_cannot_change_refresh_cost_during_run():
     runner, _ = runner_with_fake()
     with pytest.raises(BotError, match="Custo"):
         runner.update_budget(BudgetConfig(refresh_cost=5))
+
+
+@pytest.mark.parametrize(("resource", "minimum"), [("gold", 184_000), ("gems", 3)])
+def test_budget_cannot_drop_below_action_in_progress(resource, minimum):
+    runner, _ = runner_with_fake()
+    started = threading.Event()
+    finish = threading.Event()
+    completed = []
+
+    def in_progress():
+        started.set()
+        return finish.wait(timeout=5)
+
+    item = runner.config.items[0]
+    driver = SimpleNamespace(try_purchase=lambda _item: in_progress(), refresh=in_progress)
+
+    def run_action():
+        if resource == "gold":
+            completed.append(runner._try_purchase(driver, item))
+        else:
+            completed.append(runner._try_refresh(driver))
+
+    thread = threading.Thread(target=run_action)
+    thread.start()
+    try:
+        assert started.wait(timeout=2)
+        invalid = replace(runner.config.budget, **{f"{resource}_limit": minimum - 1})
+        with pytest.raises(BotError, match="reservado"):
+            runner.update_budget(invalid)
+        valid = replace(runner.config.budget, **{f"{resource}_limit": minimum})
+        runner.update_budget(valid)
+    finally:
+        finish.set()
+        thread.join(timeout=5)
+    assert completed == [True]
+    assert getattr(runner.state, f"{resource}_estimated") == minimum
+
+
+def test_failed_budget_save_keeps_live_limits():
+    runner, _ = runner_with_fake()
+
+    def fail_to_save():
+        raise OSError("falha simulada")
+
+    with pytest.raises(OSError, match="simulada"):
+        runner.update_budget(BudgetConfig(gold_limit=500_000), persist=fail_to_save)
+    assert runner.limits() == (30, 1_000_000)
 
 
 def test_live_item_toggle_does_not_change_saved_config():

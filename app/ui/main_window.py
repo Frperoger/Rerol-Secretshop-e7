@@ -8,8 +8,8 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSize, QTimer, Signal, QSignalBlocker, QRect, QPoint
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap, QKeySequence
+from PySide6.QtCore import Qt, QSize, QTimer, Signal, QSignalBlocker, QRect, QRectF, QPoint
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QDoubleSpinBox, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QCheckBox,
@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from app.config import (add_history, clear_history, data_directory, load_config,
                         prepare_templates, read_history, remove_history_rows,
-                        save_config, user_templates)
+                        save_config, save_template_scale, user_templates)
 from app.core.budget import validate_config
 from app.models import AppConfig, BudgetConfig, CalibrationConfig, ItemConfig, BotError
 from app.ui.controller import BotController
@@ -62,6 +62,54 @@ def make_button(text: str, object_name: str = "") -> QPushButton:
         button.setObjectName(object_name)
     button.setMinimumHeight(34)
     return button
+
+
+def currency_pixmap(currency: str) -> QPixmap:
+    source = QPixmap(str(bundled_root() / "assets" / f"currency_{currency}.png"))
+    if source.isNull():
+        return source
+
+    # Contornos em pixels dos recortes do jogo em assets/.
+    outline = QPainterPath()
+    if currency == "gold":
+        outline.addEllipse(QRectF(7, 6.5, 33, 33))
+    else:
+        outline.moveTo(22, 7)
+        outline.cubicTo(26, 10, 31, 15, 32.5, 21)
+        outline.cubicTo(35, 32, 31.5, 39, 22, 47)
+        outline.cubicTo(14.5, 41, 11, 35, 11, 29)
+        outline.cubicTo(11, 21, 16.5, 12, 22, 7)
+        outline.closeSubpath()
+
+    bounds = outline.boundingRect().toAlignedRect()
+    cropped = QPixmap(bounds.size())
+    cropped.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(cropped)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.translate(-bounds.x(), -bounds.y())
+    painter.fillPath(outline, Qt.GlobalColor.white)
+    painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    painter.drawPixmap(0, 0, source)
+    painter.end()
+    return cropped
+
+
+def currency_row(label: QLabel, currency: str) -> QHBoxLayout:
+    row = QHBoxLayout()
+    row.setSpacing(6)
+    pixmap = currency_pixmap(currency)
+    if not pixmap.isNull():
+        icon = QLabel()
+        icon.setObjectName(f"Currency_{currency}")
+        icon.setStyleSheet("background: transparent;")
+        icon.setFixedSize(20, 20)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setPixmap(pixmap.scaled(icon.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                                    Qt.TransformationMode.SmoothTransformation))
+        row.addWidget(icon)
+    label.setWordWrap(True)
+    row.addWidget(label, 1)
+    return row
 
 
 class NoWheelSpinBox(QSpinBox):
@@ -268,6 +316,7 @@ class MainWindow(QMainWindow):
         self.image_bytes = None
         self.screenshot_path = ""
         self.last_result = None
+        self._metric_state = {}
         self._startup_error = ""
         self._overlay_blocked = False
         self._overlay_warning_given = False
@@ -311,6 +360,7 @@ class MainWindow(QMainWindow):
             self.append_log(f"Templates: {exc}", "warn")
         self._refresh_template_labels()
         self._refresh_item_thumbnails()
+        self._update_budget_metrics()
 
     def _build_bot_tab(self):
         content = QWidget()
@@ -318,8 +368,6 @@ class MainWindow(QMainWindow):
         line.setContentsMargins(0, 14, 0, 0)
         line.setSpacing(15)
         frame, col = panel("Controle")
-        frame.setMinimumWidth(310)
-        frame.setMaximumWidth(365)
         buttons = QHBoxLayout()
         self.btn_start = make_button("▶  Iniciar", "Primary")
         self.btn_stop = make_button("■  Parar", "Danger")
@@ -341,15 +389,13 @@ class MainWindow(QMainWindow):
         self.gem_bar.setTextVisible(False)
         self.gold_bar.setTextVisible(False)
         self.gold_bar.setStyleSheet("QProgressBar::chunk {background:#d9a32a;}")
-        gem_row = QHBoxLayout()
-        gem_row.addWidget(self.gem_label, 1)
+        gem_row = currency_row(self.gem_label, "gems")
         self.btn_edit_gems = make_button("Editar")
         self.btn_edit_gems.clicked.connect(self.open_budget)
         gem_row.addWidget(self.btn_edit_gems)
         col.addLayout(gem_row)
         col.addWidget(self.gem_bar)
-        gold_row = QHBoxLayout()
-        gold_row.addWidget(self.gold_label, 1)
+        gold_row = currency_row(self.gold_label, "gold")
         self.btn_edit_gold = make_button("Editar")
         self.btn_edit_gold.clicked.connect(self.open_budget)
         gold_row.addWidget(self.btn_edit_gold)
@@ -365,7 +411,6 @@ class MainWindow(QMainWindow):
         self.active_items_layout.setSpacing(4)
         self.live_item_checks = {}
         col.addWidget(self.active_items_box)
-        self._rebuild_live_item_controls()
         self.btn_resume_game = make_button("Voltar ao jogo e retomar", "Primary")
         self.btn_resume_game.clicked.connect(self.resume_game)
         self.btn_resume_game.setVisible(False)
@@ -373,9 +418,11 @@ class MainWindow(QMainWindow):
         col.addSpacing(8)
         self.metric_labels = {}
         stats = QGridLayout()
-        metrics = [("refreshes", "Renovações"), ("purchases_verified", "Compras verificadas"),
-                   ("gems_estimated", "Gemas estimadas"), ("gold_estimated", "Ouro estimado")]
-        for idx, (key, title) in enumerate(metrics):
+        metrics = [("refreshes", "Renovações", None),
+                   ("purchases_verified", "Compras verificadas", None),
+                   ("gems_estimated", "Gemas estimadas", "gems"),
+                   ("gold_estimated", "Ouro estimado", "gold")]
+        for idx, (key, title, currency) in enumerate(metrics):
             cell = QFrame()
             cell.setStyleSheet("QFrame {background:#292929; border-radius:5px;}")
             cellbox = QVBoxLayout(cell)
@@ -384,13 +431,19 @@ class MainWindow(QMainWindow):
             name.setObjectName("Muted")
             value = QLabel("0")
             value.setObjectName("Metric")
-            cellbox.addWidget(name)
+            if currency:
+                cellbox.addLayout(currency_row(name, currency))
+            else:
+                cellbox.addWidget(name)
             cellbox.addWidget(value)
             stats.addWidget(cell, idx//2, idx%2)
             self.metric_labels[key] = value
         col.addLayout(stats)
         col.addStretch()
-        line.addWidget(frame)
+        controls = scroll_wrap(frame)
+        controls.setMinimumWidth(310)
+        controls.setMaximumWidth(365)
+        line.addWidget(controls)
         frame2, right = panel("Registro de atividade")
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
@@ -469,7 +522,8 @@ class MainWindow(QMainWindow):
         taken = {self.item_table.item(i, 1).text() for i in range(self.item_table.rowCount())}
         while f"item{n}" in taken:
             n += 1
-        self._add_item_row(ItemConfig.standard(f"item{n}", f"Item {n}", 100000))
+        with QSignalBlocker(self.item_table):
+            self._add_item_row(ItemConfig.standard(f"item{n}", f"Item {n}", 100000))
         self._rebuild_live_item_controls()
 
     def remove_item(self):
@@ -487,27 +541,33 @@ class MainWindow(QMainWindow):
         b = self.cfg.budget
         self.budget_fields = {}
         fields = [
-            ("gems_available", "Gemas disponíveis", b.gems_available),
-            ("gold_available", "Ouro disponível", b.gold_available),
-            ("gems_limit", "Quanto gastar de gemas (0 = todo o saldo)", b.gems_limit),
-            ("gold_limit", "Quanto gastar de ouro (0 = todo o saldo)", b.gold_limit),
-            ("refresh_cost", "Custo de cada renovação (gemas)", b.refresh_cost),
+            ("gems_available", "Gemas disponíveis", b.gems_available, "gems"),
+            ("gold_available", "Ouro disponível", b.gold_available, "gold"),
+            ("gems_limit", "Quanto gastar de gemas (0 = todo o saldo)", b.gems_limit, "gems"),
+            ("gold_limit", "Quanto gastar de ouro (0 = todo o saldo)", b.gold_limit, "gold"),
+            ("refresh_cost", "Custo de cada renovação (gemas)", b.refresh_cost, "gems"),
         ]
-        for idx, (key, text, value) in enumerate(fields):
+        for idx, (key, text, value, currency) in enumerate(fields):
             group = QWidget()
             col = QVBoxLayout(group)
             col.setContentsMargins(5, 4, 5, 6)
-            col.addWidget(QLabel(text))
+            col.addLayout(currency_row(QLabel(text), currency))
             control = spin(value)
+            control.setKeyboardTracking(False)
+            control.valueChanged.connect(self.save_budget)
             self.budget_fields[key] = control
             col.addWidget(control)
             grid.addWidget(group, idx//2, idx%2)
         inner.addLayout(grid)
-        hint = QLabel("Limite nunca superior ao saldo. Valores exibidos como gastos são estimativas — o bot não lê o saldo do jogo.")
+        hint = QLabel("Os valores são aplicados ao confirmar o campo. "
+                      "O limite não pode superar o saldo. Os gastos exibidos são estimativas.")
         hint.setWordWrap(True)
         hint.setObjectName("Muted")
         inner.addWidget(hint)
-        self.btn_save_budget = make_button("Validar e salvar orçamento", "Primary")
+        self.budget_save_status = QLabel("")
+        self.budget_save_status.setWordWrap(True)
+        inner.addWidget(self.budget_save_status)
+        self.btn_save_budget = make_button("Salvar orçamento", "Primary")
         self.btn_save_budget.clicked.connect(self.save_budget)
         inner.addWidget(self.btn_save_budget, alignment=Qt.AlignmentFlag.AlignLeft)
         outer.addWidget(frame)
@@ -524,6 +584,7 @@ class MainWindow(QMainWindow):
         f2, right = panel("Área de clique seguro")
         c = self.cfg.calibration
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.cal_fields = {}
         self.cal_fields["window_title"] = QLineEdit(c.window_title)
         self.cal_fields["hotkey"] = QKeySequenceEdit(QKeySequence(display_hotkey(c.hotkey)))
@@ -540,14 +601,13 @@ class MainWindow(QMainWindow):
 
         self.cal_fields["threshold"] = decimal(c.threshold, .60, .99)
         self.cal_fields["max_scrolls"] = spin(c.max_scrolls, 8)
-        self.cal_fields["same_row_factor"] = decimal(c.same_row_factor, 1, 3, .1, 1)
         self.cal_fields["pause_min"] = decimal(c.pause_min, 0, 10, .05)
         self.cal_fields["pause_max"] = decimal(c.pause_max, 0, 10, .05)
         self.cal_fields["focus_timeout"] = decimal(c.focus_timeout, 1, 300, 1, 1)
         self.cal_fields["modal_timeout"] = decimal(c.modal_timeout, .5, 10, .5, 1)
         labels = {"window_title": "Título da janela", "hotkey": "Atalho de emergência",
                   "threshold": "Limiar de match", "max_scrolls": "Scrolls máximos",
-                  "same_row_factor": "Faixa da mesma linha", "pause_min": "Pausa mínima (s)",
+                  "pause_min": "Pausa mínima (s)",
                   "pause_max": "Pausa máxima (s)", "focus_timeout": "Espera por foco (s)",
                   "modal_timeout": "Timeout de confirmação (s)"}
         for key, control in self.cal_fields.items():
@@ -558,6 +618,10 @@ class MainWindow(QMainWindow):
         self.hotkey_hint.setWordWrap(True)
         left.addLayout(form)
         left.addWidget(self.hotkey_hint)
+        self.btn_reset_speed = make_button("Restaurar velocidade do script original")
+        self.btn_reset_speed.clicked.connect(self.reset_speed)
+        left.addWidget(self.btn_reset_speed)
+        left.addStretch()
         self._calibration_detection_panel = f1
         top.addWidget(f1, 0, 0)
         self.preview = SafeAreaPreview(c.safe_area, c.overlay_area, c.auto_overlay)
@@ -565,9 +629,9 @@ class MainWindow(QMainWindow):
         self.preview.overlay_changed.connect(self._update_overlay_fields)
         right.addWidget(self.preview)
         preview_actions = QHBoxLayout()
-        self.btn_area_image = make_button("Carregar imagem da loja")
+        self.btn_area_image = make_button("Abrir imagem")
         self.btn_area_image.clicked.connect(self.pick_area_image)
-        self.btn_area_live = make_button("Capturar janela do jogo")
+        self.btn_area_live = make_button("Capturar janela")
         self.btn_area_live.clicked.connect(self.capture_game_window)
         preview_actions.addWidget(self.btn_area_image)
         preview_actions.addWidget(self.btn_area_live)
@@ -586,7 +650,7 @@ class MainWindow(QMainWindow):
         green_hint.setObjectName("Muted")
         green_hint.setWordWrap(True)
         right.addWidget(green_hint)
-        self.overlay_enabled = QCheckBox("Mostrar painel compacto sobre a loja (sem Alt+Tab)")
+        self.overlay_enabled = QCheckBox("Mostrar painel compacto sobre a loja")
         self.overlay_enabled.setChecked(c.auto_overlay)
         self.overlay_enabled.toggled.connect(self.preview.set_overlay_enabled)
         right.addWidget(self.overlay_enabled)
@@ -625,15 +689,16 @@ class MainWindow(QMainWindow):
         right.addWidget(self.template_folder_label)
         self._calibration_area_panel = f2
         self._calibration_top_layout = top
-        self._calibration_stacked = False
         top.addWidget(f2, 0, 1)
         top.setColumnStretch(0, 1)
         top.setColumnStretch(1, 1)
         main.addLayout(top)
-        self._adjust_calibration_layout(self.width())
         self._update_area_warning()
         diag, dl = panel("Diagnóstico visual — sem clicar no jogo")
-        instruction = QLabel("Selecione uma captura PNG da loja e verifique as caixas de detecção. Este teste nunca move o mouse.")
+        instruction = QLabel("Capture a janela inteira do jogo com a loja aberta e sem diálogos, "
+                             "ou abra um PNG nessa mesma resolução. O teste ajusta a escala dos "
+                             "templates e salva o resultado quando reconhece Renovar. "
+                             "A calibração não move o mouse.")
         instruction.setWordWrap(True)
         instruction.setObjectName("Muted")
         dl.addWidget(instruction)
@@ -642,10 +707,13 @@ class MainWindow(QMainWindow):
         self.capture_label.setReadOnly(True)
         self.btn_capture = make_button("Abrir PNG")
         self.btn_capture.clicked.connect(self.pick_capture)
-        self.btn_diagnose = make_button("Testar reconhecimento")
+        btn_capture_window = make_button("Capturar janela")
+        btn_capture_window.clicked.connect(self.capture_game_window)
+        self.btn_diagnose = make_button("Calibrar e salvar escala")
         self.btn_diagnose.clicked.connect(self.run_diagnostic)
         browse.addWidget(self.capture_label, 1)
         browse.addWidget(self.btn_capture)
+        browse.addWidget(btn_capture_window)
         browse.addWidget(self.btn_diagnose)
         dl.addLayout(browse)
         self.diagnostic_label = QLabel("Nenhuma captura analisada.")
@@ -708,27 +776,30 @@ class MainWindow(QMainWindow):
             check.setParent(None)
             check.deleteLater()
         self.live_item_checks.clear()
-        if hasattr(self, "item_table"):
-            rows = []
-            for r in range(self.item_table.rowCount()):
-                ident = self.item_table.item(r, 1).text().strip()
-                name = self.item_table.item(r, 2).text().strip() or ident
-                active = self.item_table.item(r, 0).checkState() == Qt.CheckState.Checked
-                rows.append((ident, name, active))
-        else:
-            rows = [(it.id, it.name, it.enabled) for it in self.cfg.items]
-        for ident, name, active in rows:
+        for row in range(self.item_table.rowCount()):
+            ident = self.item_table.item(row, 1).text().strip()
             if not ident:
                 continue
-            control = QCheckBox(name)
+            name = self.item_table.item(row, 2).text().strip() or ident
+            filename = self.item_table.item(row, 5).text().strip()
+            active = self.item_table.item(row, 0).checkState() == Qt.CheckState.Checked
+            pixmap = QPixmap(str(self.templates_dir / filename)) if filename else QPixmap()
+            control = QCheckBox(name if pixmap.isNull() else "")
+            if not pixmap.isNull():
+                control.setIcon(QIcon(pixmap))
+                control.setIconSize(QSize(30, 30))
+            control.setToolTip(name)
+            control.setAccessibleName(name)
             control.setChecked(active)
             control.toggled.connect(lambda value, item_id=ident: self.change_live_item(item_id, value))
             self.active_items_layout.addWidget(control)
             self.live_item_checks[ident] = control
 
     def _sync_item_labels(self, cell):
-        """O nome aparece na aba Bot enquanto se edita, sem exigir Salvar."""
-        if cell.column() in (1, 2):
+        """Atualiza a aba Bot ao editar os itens."""
+        if cell.column() == 5:
+            self._show_item_thumbnail(cell.row(), cell.text().strip())
+        if cell.column() in (1, 2, 5):
             self._rebuild_live_item_controls()
         elif cell.column() == 0:
             ident_cell = self.item_table.item(cell.row(), 1)
@@ -737,8 +808,6 @@ class MainWindow(QMainWindow):
                 blocker = QSignalBlocker(check)
                 check.setChecked(cell.checkState() == Qt.CheckState.Checked)
                 del blocker
-        elif cell.column() == 5:
-            self._show_item_thumbnail(cell.row(), cell.text().strip())
 
     def change_live_item(self, ident: str, enabled: bool):
         if self.controller.running:
@@ -746,6 +815,9 @@ class MainWindow(QMainWindow):
                 self.controller.set_item_enabled(ident, enabled)
                 self.append_log(f"Item {ident} {'habilitado' if enabled else 'desabilitado'} em tempo real.")
             except (ValueError, BotError) as exc:
+                check = self.live_item_checks[ident]
+                with QSignalBlocker(check):
+                    check.setChecked(not enabled)
                 QMessageBox.warning(self, "Item não alterado", str(exc))
                 return
         else:
@@ -776,6 +848,7 @@ class MainWindow(QMainWindow):
     def _refresh_item_thumbnails(self):
         for row in range(self.item_table.rowCount()):
             self._show_item_thumbnail(row, self.item_table.item(row, 5).text().strip())
+        self._rebuild_live_item_controls()
 
     def _collect_items(self) -> list[ItemConfig]:
         items = []
@@ -822,7 +895,6 @@ class MainWindow(QMainWindow):
             self.templates_dir = user_templates(cfg)
             self.items_save_status.setText(f"✓ {len(cfg.items)} item(ns) salvo(s); {len(checked)} PNGs encontrados e validados.")
             self._refresh_item_thumbnails()
-            self._rebuild_live_item_controls()
             self.append_log("Itens e templates conferidos e salvos.", "ok")
             QMessageBox.information(self, "Itens salvos",
                 f"Configuração salva com sucesso.\n"
@@ -837,23 +909,16 @@ class MainWindow(QMainWindow):
             # O orçamento é independente da edição da calibração/atalho.
             cfg = AppConfig.from_dict(self.cfg.to_dict())
             cfg.budget = budget
-            validate_config(cfg)
             if self.controller.running:
-                # Valide ANTES de aplicar ao motor em execução.
-                self.controller.update_budget(budget)
-            save_config(cfg)
+                self.controller.update_budget(budget, persist=lambda: save_config(cfg))
+            else:
+                save_config(cfg)
             self.cfg = cfg
-            self.update_metrics(self.controller.runner.state.to_dict() if self.controller.running
-                                else {"status": "parado"})
-            self.append_log("Orçamento aplicado sem interromper o bot." if self.controller.running
-                            else "Orçamento salvo.", "ok")
-            QMessageBox.information(self, "Orçamento",
-                                    "Orçamento salvo. Volte à aba Bot e clique em 'Voltar ao jogo e retomar' "
-                                    "para continuar sem encerrar a execução." if self.controller.running
-                                    else "Orçamento salvo com sucesso.")
+            self._update_budget_metrics()
+            self.budget_save_status.setText("✓ Orçamento aplicado e salvo.")
             return True
-        except (ValueError, BotError, OSError, RuntimeError) as exc:
-            QMessageBox.warning(self, "Orçamento inválido", str(exc))
+        except (ValueError, OSError, RuntimeError) as exc:
+            self.budget_save_status.setText(f"✗ Orçamento anterior em uso. {exc}")
             return False
 
     def pick_area_image(self):
@@ -881,18 +946,16 @@ class MainWindow(QMainWindow):
             import mss
             import numpy as np
             import cv2
-            from app.platform.windows import Win32
+            from app.platform.windows import TargetWindow, Win32
             api = Win32()
-            hwnd = api.find(self.cal_fields["window_title"].text().strip())
-            api.activate(hwnd)
+            target = TargetWindow.locate(api, self.cal_fields["window_title"].text().strip())
             import time
             time.sleep(0.25)  # o Windows precisa apresentar a janela antes da captura
-            rect = api.rect(hwnd)
-            if not api.visible(hwnd):
-                raise ValueError("Janela do jogo não está visível.")
+            rect = target.ensure()
             with mss.mss() as sct:
                 image = np.asarray(sct.grab({"left": rect.left, "top": rect.top,
                                                 "width": rect.width, "height": rect.height}))
+            target.ensure()
             rgb = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
             file_path = data_directory() / "captura_calibracao.png"
             file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -908,6 +971,12 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Captura indisponível", str(exc))
         finally:
             self.show_panel()
+
+    def reset_speed(self):
+        defaults = CalibrationConfig()
+        for key in ("pause_min", "pause_max", "max_scrolls"):
+            self.cal_fields[key].setValue(getattr(defaults, key))
+        self.settings_save_status.setText("Velocidade do script original carregada. Salve para aplicar.")
 
     def reset_calibration(self):
         if self.controller.running:
@@ -934,32 +1003,6 @@ class MainWindow(QMainWindow):
         self._update_overlay_preview()
         self._hotkey_preview()
         self.append_log("Valores padrão carregados; clique em Salvar calibração para persistir.")
-
-    def _adjust_calibration_layout(self, width: int):
-        """Reorganiza os painéis quando o espaço disponível ficaria apertado.
-
-        Evita forçar títulos e campos largos a duas colunas em telas menores.
-        """
-        if not hasattr(self, "_calibration_top_layout"):
-            return
-        stacked = width < 1260
-        if stacked == self._calibration_stacked:
-            return
-        grid = self._calibration_top_layout
-        grid.removeWidget(self._calibration_area_panel)
-        if stacked:
-            grid.addWidget(self._calibration_area_panel, 1, 0)
-            grid.setColumnStretch(0, 1)
-            grid.setColumnStretch(1, 0)
-        else:
-            grid.addWidget(self._calibration_area_panel, 0, 1)
-            grid.setColumnStretch(0, 1)
-            grid.setColumnStretch(1, 1)
-        self._calibration_stacked = stacked
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._adjust_calibration_layout(event.size().width())
 
     def _make_tray(self):
         pix = QPixmap(str(bundled_root() / "assets" / "app_icon.png"))
@@ -1017,10 +1060,11 @@ class MainWindow(QMainWindow):
 
     def resume_game(self):
         if self.controller.running:
-            self.hide() if self.tray.isVisible() else self.showMinimized()
+            if self.cfg.calibration.auto_overlay:
+                self.hide() if self.tray.isVisible() else self.showMinimized()
             self.controller.set_ui_paused(False)
             QTimer.singleShot(500, self._maybe_show_overlay)
-            self.append_log("Painel ocultado. Retorne o foco à janela do jogo.")
+            self.append_log("Retorne o foco à janela do jogo.")
 
     def _update_area_preview(self, _value=None):
         self.preview.set_area(tuple(self.area_fields[k].value()
@@ -1104,20 +1148,25 @@ class MainWindow(QMainWindow):
 
     def run_diagnostic(self):
         if not self.screenshot_path:
-            QMessageBox.information(self, "Captura ausente", "Escolha um arquivo PNG antes do teste.")
+            QMessageBox.information(self, "Captura ausente", "Capture a janela do jogo ou abra um PNG.")
             return
         try:
             cfg = self._collect_config()
             validate_config(cfg)
-            png_data, lines = analyze_image(Path(self.screenshot_path), cfg, self.templates_dir)
+            png_data, lines, profile = analyze_image(Path(self.screenshot_path), cfg, self.templates_dir)
             pix = QPixmap()
             if not pix.loadFromData(png_data):
                 raise ValueError("Não foi possível exibir o resultado do teste.")
             self.image_bytes = png_data
-            self.diagnostic_image.setPixmap(pix.scaled(QSize(900, 290), Qt.AspectRatioMode.KeepAspectRatio,
+            self.diagnostic_image.setPixmap(pix.scaled(QSize(680, 290), Qt.AspectRatioMode.KeepAspectRatio,
                                                        Qt.TransformationMode.SmoothTransformation))
-            self.diagnostic_label.setText("  |  ".join(lines) or "Nenhum item ativo.")
-            self.append_log("Diagnóstico offline executado sem cliques.", "ok")
+            if profile is not None:
+                save_template_scale(*profile)
+                lines.append("Escala salva para essa resolução e conjunto de templates.")
+            else:
+                lines.append("Sem escala validada para salvar.")
+            self.diagnostic_label.setText("\n".join(lines))
+            self.append_log("Calibração de imagem concluída sem mover o mouse.", "info")
         except Exception as exc:
             QMessageBox.warning(self, "Falha no diagnóstico", str(exc))
 
@@ -1155,8 +1204,8 @@ class MainWindow(QMainWindow):
             self.cfg = cfg
             self.templates_dir = user_templates(cfg)
             self._refresh_template_labels()
-            self._rebuild_live_item_controls()
             self._refresh_item_thumbnails()
+            self._update_budget_metrics()
             self.append_log("Configurações validadas e salvas no AppData.", "ok")
             notice = (" Atalho incompleto: o atalho anterior foi mantido."
                       if hotkey_kept else "")
@@ -1213,7 +1262,8 @@ class MainWindow(QMainWindow):
 
     def _maybe_show_overlay(self):
         if (not self.controller.running or not self.cfg.calibration.auto_overlay or
-                self._overlay_blocked or self.isVisible() or self.overlay.isVisible()):
+                self._overlay_blocked or (self.isVisible() and not self.isMinimized()) or
+                self.overlay.isVisible()):
             return
         try:
             from app.platform.windows import Win32
@@ -1266,10 +1316,8 @@ class MainWindow(QMainWindow):
             self._set_running(True)
             self.status.setText("●  PREPARANDO")
             self.status.setStyleSheet("color:#52a8ff;font-weight:600;")
-            if self.tray.isVisible():
-                self.hide()  # oculta o painel antes da ativação do jogo
-            else:
-                self.showMinimized()
+            if self.cfg.calibration.auto_overlay:
+                self.hide() if self.tray.isVisible() else self.showMinimized()
             self.controller.start(self.cfg, path)
         except Exception as exc:
             self._set_running(False)
@@ -1288,23 +1336,27 @@ class MainWindow(QMainWindow):
         scroll = self.console.verticalScrollBar()
         scroll.setValue(scroll.maximum())
 
-    def update_metrics(self, state: dict):
-        self.overlay.update_state(state)
-        if state.get("status") in ("executando", "pausado_sem_itens", "pausado_por_foco"):
-            self._maybe_show_overlay()
-        for key, widget in self.metric_labels.items():
-            widget.setText(fmt(state.get(key, 0)))
-        limits = self.controller.runner.limits() if self.controller.running and self.controller.runner else (
-            self.cfg.budget.gems_limit or self.cfg.budget.gems_available,
-            self.cfg.budget.gold_limit or self.cfg.budget.gold_available)
-        limit_gems, limit_gold = limits
-        gems, gold = state.get("gems_estimated", 0), state.get("gold_estimated", 0)
+    def _update_budget_metrics(self):
+        budget = self.cfg.budget
+        limit_gems = budget.gems_limit or budget.gems_available
+        limit_gold = budget.gold_limit or budget.gold_available
+        gems = self._metric_state.get("gems_estimated", 0)
+        gold = self._metric_state.get("gold_estimated", 0)
         self.gem_label.setText(f"Gemas estimadas: {fmt(gems)} / {fmt(limit_gems)}")
         self.gold_label.setText(f"Ouro estimado: {fmt(gold)} / {fmt(limit_gold)}")
         self.gem_bar.setRange(0, max(1, limit_gems))
         self.gold_bar.setRange(0, max(1, limit_gold))
         self.gem_bar.setValue(min(gems, limit_gems))
         self.gold_bar.setValue(min(gold, limit_gold))
+
+    def update_metrics(self, state: dict):
+        self._metric_state = state
+        self._update_budget_metrics()
+        self.overlay.update_state(state)
+        if state.get("status") in ("executando", "pausado_sem_itens", "pausado_por_foco"):
+            self._maybe_show_overlay()
+        for key, widget in self.metric_labels.items():
+            widget.setText(fmt(state.get(key, 0)))
         status = state.get("status", "")
         title = {"executando": "EM EXECUÇÃO", "preparando": "PREPARANDO",
                  "pausado_por_foco": "PAUSADO — FOCO",

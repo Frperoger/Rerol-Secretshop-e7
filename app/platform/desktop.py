@@ -5,7 +5,9 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from app.config import load_template_scale
 from app.core.geometry import choose_match_point, choose_safe_point
+from app.core.template_scale import load_templates, resize_template, scale_key, template_filenames
 from app.core.vision import detect, same_row
 from app.models import AppConfig, BotError, FocusLost, StopRequested, UncertainAction
 from app.platform.windows import TargetWindow, Win32
@@ -22,41 +24,33 @@ class DesktopIO:
         self.api = None
         self.target = None
         self.templates = {}
+        self._check_cached_scale = False
 
     def prepare(self):
         import cv2
         self.cv2 = cv2
-        required = {"renovar.png", "confirmar.png"}
-        optional = set()
-        for item in self.config.items:
-            # Carrega os PNGs também de itens desativados para permitir ativá-los
-            # enquanto o motor está em execução, sem reiniciar a sessão.
-            names = (item.icon_template, item.buy_template, item.price_template)
-            if item.enabled:
-                required.update(names)
-            else:
-                optional.update(name for name in names if name)
-            if item.sold_template:
-                optional.add(item.sold_template)
+        required, optional = template_filenames(self.config.items)
         missing = [f for f in sorted(required) if not (self.templates_dir / f).is_file()]
         if missing:
             raise BotError("Templates ausentes em " + str(self.templates_dir) + ": " + ", ".join(missing))
-        for filename in sorted(required | optional):
-            path = self.templates_dir / filename
-            if not path.is_file():
-                if filename in optional:
-                    self.log(f"Template opcional ausente: {filename}", "warn")
-                    continue
-                raise BotError(f"Template obrigatório não encontrado: {filename}")
-            # imdecode + fromfile lida melhor com caminhos Unicode no Windows.
-            import numpy as np
-            frame = cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_COLOR)
-            if frame is None or frame.size == 0:
-                raise BotError(f"Template PNG inválido: {filename}")
-            self.templates[filename] = frame
+        templates, fingerprint = load_templates(self.templates_dir, required | optional)
+        for filename in sorted((required | optional) - templates.keys()):
+            if filename in optional and not (self.templates_dir / filename).is_file():
+                self.log(f"Template opcional ausente: {filename}", "warn")
+                continue
+            raise BotError(f"Template PNG inválido: {filename}")
         self.api = Win32()
         self.target = TargetWindow.locate(self.api, self.config.calibration.window_title)
         self.log(f"Janela localizada: HWND={self.target.hwnd}", "info")
+        rect = self.target.initial_rect
+        scale = load_template_scale(scale_key(rect.width, rect.height, fingerprint))
+        if scale is None:
+            self.log(f"Janela de {rect.width} × {rect.height} sem escala salva. Usando os PNGs originais.", "info")
+            self.templates = templates
+        else:
+            self.templates = {name: resize_template(frame, scale) for name, frame in templates.items()}
+            self._check_cached_scale = True
+            self.log(f"Escala de {scale:.0%} carregada para {rect.width} × {rect.height} pixels.", "info")
 
     def supports_item(self, item):
         return all(name in self.templates for name in (
@@ -82,7 +76,7 @@ class DesktopIO:
 
     def same_row(self, frame, name: str, icon):
         return same_row(frame, self.templates[name], icon,
-                        self.config.calibration.threshold, self.config.calibration.same_row_factor)
+                        self.config.calibration.threshold)
 
     def _click_absolute(self, x: int, y: int) -> None:
         import pyautogui
@@ -102,12 +96,18 @@ class DesktopIO:
                 pyautogui.mouseUp()  # liberar inclusive se mouseDown/pause falhar
         except pyautogui.FailSafeException as exc:
             raise BotError("FailSafe acionado: cursor em um canto da tela.") from exc
+        self.log(f"Clique enviado em ({x}, {y}) na tela (mouseDown/mouseUp).", "info")
 
     def click_match(self, match, lower_half: bool = False):
         x, y = choose_match_point(self.target.initial_rect, match, lower_half)
         self._click_absolute(x, y)
 
     def click_safe(self):
+        if self._check_cached_scale:
+            if self.wait_match("renovar.png", self.config.calibration.modal_timeout) is None:
+                raise BotError("A escala salva não reconheceu o botão Renovar. "
+                               "Abra a loja sem diálogos e recalibre se o zoom tiver mudado.")
+            self._check_cached_scale = False
         x, y = choose_safe_point(self.target.initial_rect, self.config.calibration.safe_area)
         self._click_absolute(x, y)
 
@@ -121,11 +121,6 @@ class DesktopIO:
         self.target.ensure(x, y)
         self.stop_check()
         pyautogui.scroll(amount)
-
-    def scroll_top(self):
-        for _ in range(3):
-            self._scroll(20)
-            self.pause(0.03, 0.05)
 
     def scroll_down(self):
         self._scroll(-250)
@@ -167,31 +162,23 @@ class DesktopIO:
             if confirm_price is None:
                 raise UncertainAction(f"[{item.name}] Modal de preço não apareceu após clicar.")
             self.click_match(confirm_price)
-            # O segundo diálogo é opcional para compras, mas obrigatório ao renovar.
-            confirm_generic = self.wait_match("confirmar.png", 0.8)
-            if confirm_generic:
-                self.click_match(confirm_generic)
             deadline = time.monotonic() + self.config.calibration.modal_timeout
             stable_confirmations = 0
+            generic_clicked = False
             while True:
                 frame = self.capture()
-                no_price = self.match(frame, item.price_template) is None
-                no_generic = self.match(frame, "confirmar.png") is None
-                if no_price and no_generic:
-                    sold_visible = (item.sold_template in self.templates
-                                    and bool(self.match(frame, item.sold_template)))
-                    # Evidência de mudança de estado: ícone permanece na mesma loja,
-                    # mas botão de compra correspondente deixa de existir naquela linha.
-                    current_icon = self.match(frame, item.icon_template)
-                    button_missing_in_same_row = (current_icon is not None
-                            and abs(current_icon.y - icon.y) <= max(4, icon.height // 2)
-                            and self.same_row(frame, item.buy_template, current_icon) is None)
-                    if sold_visible or button_missing_in_same_row:
-                        stable_confirmations += 1
-                        if stable_confirmations >= 2:
-                            return True
-                    else:
-                        stable_confirmations = 0
+                generic = self.match(frame, "confirmar.png")
+                if generic is not None and not generic_clicked:
+                    self.click_match(generic)
+                    generic_clicked = True
+                    stable_confirmations = 0
+                    deadline = time.monotonic() + self.config.calibration.modal_timeout
+                    continue
+                if (generic is None and self.match(frame, item.price_template) is None
+                        and self._purchase_visible(frame, item, icon)):
+                    stable_confirmations += 1
+                    if stable_confirmations >= 2:
+                        return True
                 else:
                     stable_confirmations = 0
                 if time.monotonic() >= deadline:
@@ -203,16 +190,19 @@ class DesktopIO:
                 raise UncertainAction(f"[{item.name}] Compra potencialmente enviada, sem confirmação: {exc}") from exc
             raise
 
+    def _purchase_visible(self, frame, item, original_icon):
+        if item.sold_template in self.templates and self.match(frame, item.sold_template):
+            return True
+        # A linha continua visível e o botão de compra correspondente desapareceu.
+        icon = self.match(frame, item.icon_template)
+        return (icon is not None
+                and abs(icon.y - original_icon.y) <= max(4, original_icon.height // 2)
+                and self.same_row(frame, item.buy_template, icon) is None)
+
     def refresh(self) -> None:
-        # A UI pode exibir Renovar em posições diferentes conforme a rolagem.
-        # Não role antes de verificar a tela atual.
-        renew = self.wait_match("renovar.png", 0.5)
+        renew = self.wait_match("renovar.png", self.config.calibration.modal_timeout)
         if renew is None:
-            self.scroll_top()
-            self.pause(0.1, 0.2)
-            renew = self.wait_match("renovar.png", self.config.calibration.modal_timeout)
-        if renew is None:
-            raise BotError("Botão Renovar não encontrado antes nem depois da rolagem. "
+            raise BotError("Botão Renovar não encontrado na posição atual da loja. "
                            "Use Calibração > Diagnóstico para medir a confiança do renovar.png; "
                            "confira zoom, idioma e recorte da imagem.")
         committed = False

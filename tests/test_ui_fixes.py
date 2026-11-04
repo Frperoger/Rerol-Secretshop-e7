@@ -49,6 +49,24 @@ def test_safe_area_preview_updates_coordinates(monkeypatch, tmp_path):
         win.close()
 
 
+def test_calibration_panels_share_a_row_at_small_and_large_widths(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    win = MainWindow()
+    try:
+        win.tabs.setCurrentIndex(3)
+        win.show()
+        for width in (win.minimumWidth(), 1110, 1400):
+            win.resize(width, 760)
+            app.processEvents()
+            detection = win._calibration_detection_panel.geometry()
+            safe_area = win._calibration_area_panel.geometry()
+            assert detection.top() == safe_area.top()
+            assert detection.right() < safe_area.left()
+    finally:
+        win.close()
+
+
 def test_delete_history_selection_and_all(monkeypatch, tmp_path):
     from app.config import add_history, read_history
     monkeypatch.setenv("APPDATA", str(tmp_path))

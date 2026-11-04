@@ -65,7 +65,6 @@ class CalibrationConfig:
     hotkey: str = "ctrl+alt+q"
     threshold: float = 0.83
     max_scrolls: int = 2
-    same_row_factor: float = 1.6
     pause_min: float = 0.1
     pause_max: float = 0.3
     safe_area: tuple[float, float, float, float] = (0.72, 0.20, 0.79, 0.90)
@@ -91,6 +90,7 @@ class AppConfig:
     @classmethod
     def from_dict(cls, data: dict) -> "AppConfig":
         cal = dict(data.get("calibration", {}))
+        cal.pop("same_row_factor", None)  # configuração legada da v2 e v3 inicial
         if "safe_area" in cal:
             cal["safe_area"] = tuple(cal["safe_area"])
         if "overlay_area" in cal:

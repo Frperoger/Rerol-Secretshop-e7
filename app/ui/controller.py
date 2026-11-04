@@ -29,10 +29,10 @@ class BotController(QObject):
                                        name="Epic7ShopBot", daemon=True)
         self.thread.start()
 
-    def update_budget(self, budget):
+    def update_budget(self, budget, *, persist=None):
         if not self.running or self.runner is None:
             raise RuntimeError("Bot não está em execução.")
-        self.runner.update_budget(budget)
+        self.runner.update_budget(budget, persist=persist)
 
     def set_item_enabled(self, item_id, enabled):
         if self.running and self.runner is not None:

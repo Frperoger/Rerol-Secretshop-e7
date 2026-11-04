@@ -14,6 +14,12 @@ def test_dynamic_items_and_captured_hotkey(monkeypatch, tmp_path):
     win = MainWindow()
     try:
         win.item_table.item(0, 2).setText('Medalhas Místicas')
+        control = win.live_item_checks['item1']
+        assert control.text() == ''
+        assert not control.icon().isNull()
+        assert control.toolTip() == 'Medalhas Místicas'
+        assert control.accessibleName() == 'Medalhas Místicas'
+        win.item_table.item(0, 5).setText('ausente.png')
         assert win.live_item_checks['item1'].text() == 'Medalhas Místicas'
         assert win.btn_record_hotkey.text() == 'Gravar teclas'
         win.cal_fields['hotkey'].setKeySequence(QKeySequence('Ctrl+Shift+F8'))
