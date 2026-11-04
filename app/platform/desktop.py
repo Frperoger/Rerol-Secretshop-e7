@@ -32,7 +32,8 @@ class DesktopIO:
         required, optional = template_filenames(self.config.items)
         missing = [f for f in sorted(required) if not (self.templates_dir / f).is_file()]
         if missing:
-            raise BotError("Templates ausentes em " + str(self.templates_dir) + ": " + ", ".join(missing))
+            self.log(f"Templates ausentes em {self.templates_dir}: {', '.join(missing)}", "error")
+            raise BotError("Faltam imagens obrigatórias. Confira a pasta de templates na aba Itens.")
         templates, fingerprint = load_templates(self.templates_dir, required | optional)
         for filename in sorted((required | optional) - templates.keys()):
             if filename in optional and not (self.templates_dir / filename).is_file():

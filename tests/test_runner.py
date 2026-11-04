@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 from app.engine.runner import BotRunner
 from app.models import AppConfig, FocusLost, UncertainAction
 
@@ -54,8 +55,10 @@ def test_runner_purchase_and_stop_on_gems():
     assert records[0].refreshes == 0
 
 
-def test_uncertain_action_stops_without_counting_purchase():
+def test_uncertain_action_stops_without_counting_purchase(caplog):
     runner, records = create_runner()
+    activity = []
+    runner.on_log = lambda message, level: activity.append((message, level))
     def change_factory(*args):
         x = FakeDesktop(*args)
         x.fail_buy = True
@@ -68,6 +71,39 @@ def test_uncertain_action_stops_without_counting_purchase():
     assert data["gold_estimated"] == 0
     assert len(data["uncertain_actions"]) == 1
     assert records[0].refreshes == 0
+    assert "modal faltante" in caplog.text
+    assert [message for message, level in activity if level == "error"] == [
+        "A ação não pôde ser confirmada. Confira os itens e saldos no jogo antes de reiniciar."
+    ]
+
+
+def test_activity_shows_purchases_and_focus_without_driver_details(caplog):
+    cfg = AppConfig()
+    cfg.budget.gems_available = cfg.budget.gems_limit = 3
+    runner, _ = create_runner(cfg)
+    activity = []
+    runner.on_log = lambda message, level: activity.append((message, level))
+    caplog.set_level(logging.INFO, logger="epic7shop")
+
+    def factory(*args):
+        driver = FakeDesktop(*args)
+        driver.lost_focus_once = True
+        driver.prepare = lambda: args[-1]("Template opcional ausente: vendido.png", "warn")
+        return driver
+
+    runner._driver_factory = factory
+    result = runner.run()
+
+    assert result["refreshes"] == 1
+    assert activity == [
+        ("O bot começa em 3 segundos. Deixe a loja visível.", "info"),
+        ("Bot pausado. Deixe a loja visível e volte ao jogo para continuar.", "warn"),
+        ("Bot retomado.", "info"),
+        ("Compra confirmada: Item 1 · 184.000 de ouro estimados.", "ok"),
+    ]
+    assert "Template opcional ausente: vendido.png" in caplog.text
+    assert "Solicitando renovação da loja" in caplog.text
+    assert "Procurando itens na loja atual" in caplog.text
 
 
 def test_focus_loss_resumes_before_any_action():

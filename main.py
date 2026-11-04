@@ -10,21 +10,27 @@ def main():
         setup_logging()
     except OSError:
         pass  # log visual continua disponível mesmo se AppData não permitir escrita
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtGui import QFont, QIcon
     from app.config import bundled_root
-    from app.ui.main_window import MainWindow
-    from app.ui.style import QSS
+    from app.ui.quick_window import QuickWindow
     app = QApplication(sys.argv)
     app.setApplicationName("Epic7 Shop Bot")
+    app.setFont(QFont("Segoe UI", 10))
     icon = bundled_root() / "assets" / "app_icon.png"
     if icon.exists():
         app.setWindowIcon(QIcon(str(icon)))
     app.setQuitOnLastWindowClosed(False)
-    app.setStyleSheet(QSS)
-    window = MainWindow()
+    try:
+        window = QuickWindow()
+    except RuntimeError as exc:
+        QMessageBox.critical(None, "Falha ao abrir Epic7 Shop Bot", str(exc))
+        return 1
     window.show()
-    return app.exec()
+    try:
+        return app.exec()
+    finally:
+        window.dispose()
 
 
 if __name__ == "__main__":

@@ -20,14 +20,15 @@ a = Analysis(
     [str(root / 'main.py')],
     pathex=[str(root)],
     binaries=[],
-    datas=[(str(root / 'templates'), 'templates')] + ([(str(assets), 'assets')] if assets.exists() else []),
+    datas=[(str(root / 'templates'), 'templates'), (str(root / 'qml'), 'qml')]
+          + ([(str(assets), 'assets')] if assets.exists() else []),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=['PySide6.QtWebEngineCore', 'PySide6.QtWebEngineWidgets',
               'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
-              'PySide6.QtQuick', 'PySide6.QtQml', 'PySide6.Qt3DCore'],
+              'PySide6.Qt3DCore'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

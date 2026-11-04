@@ -4,6 +4,11 @@ from logging.handlers import RotatingFileHandler
 from app.config import data_directory
 
 
+def log_diagnostic(message: str, level: str = "info") -> None:
+    severity = {"warn": logging.WARNING, "error": logging.ERROR}.get(level, logging.INFO)
+    logging.getLogger("epic7shop").log(severity, message)
+
+
 def setup_logging():
     log = logging.getLogger("epic7shop")
     log.setLevel(logging.INFO)

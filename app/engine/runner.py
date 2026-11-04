@@ -1,6 +1,5 @@
 """Orquestração determinística. Sem Qt, Win32 ou chamadas diretas de mouse."""
 from __future__ import annotations
-import logging
 import threading
 from copy import deepcopy
 from datetime import datetime
@@ -8,6 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 from app.core.budget import can_purchase, can_refresh, validate_config
+from app.logging_setup import log_diagnostic
 from app.models import (AppConfig, BotError, FocusLost, RunState, StopRequested,
                         UncertainAction, WindowInvalid)
 
@@ -116,11 +116,11 @@ class BotRunner:
         if self.stop_event.wait(max(0.0, duration)):
             raise StopRequested()
 
-    def log(self, message: str, level: str = "info"):
-        severity = {"info": logging.INFO, "warn": logging.WARNING,
-                    "error": logging.ERROR, "ok": logging.INFO}.get(level, logging.INFO)
-        logging.getLogger("epic7shop").log(severity, message)
-        self.on_log(message, level)
+    def log(self, message: str, level: str = "info", *, activity: str | None = None):
+        """Registra detalhes técnicos e envia à interface apenas avisos selecionados."""
+        log_diagnostic(message, level)
+        if activity is not None:
+            self.on_log(activity, level)
 
     def notify(self, status: str):
         self.state.status = status
@@ -128,7 +128,8 @@ class BotRunner:
 
     def _await_focus(self, driver):
         self.notify("pausado_por_foco")
-        self.log("Jogo perdeu foco ou há outra janela sobre ele. Nenhum clique será enviado.", "warn")
+        self.log("Jogo perdeu foco ou há outra janela sobre ele. Nenhum clique será enviado.", "warn",
+                 activity="Bot pausado. Deixe a loja visível e volte ao jogo para continuar.")
         waited = 0.0
         limit = self.config.calibration.focus_timeout
         while waited < limit:
@@ -139,7 +140,8 @@ class BotRunner:
                 self.notify("pausado_por_foco")
             try:
                 driver.ensure_focus()
-                self.log("Foco recuperado; reiniciando varredura da loja.", "info")
+                self.log("Foco recuperado; reiniciando varredura da loja.",
+                         activity="Bot retomado.")
                 self.notify("executando")
                 return
             except FocusLost:
@@ -178,7 +180,9 @@ class BotRunner:
                 if item.id in self.state.purchased_in_rotation:
                     continue
                 if self._try_purchase(driver, item):
-                    self.log(f"[{item.name}] Compra verificada na interface; custo estimado {item.price_gold:,} ouro.", "ok")
+                    cost = f"{item.price_gold:,}".replace(",", ".")
+                    self.log(f"[{item.name}] Compra verificada na interface; custo estimado {cost} ouro.", "ok",
+                             activity=f"Compra confirmada: {item.name} · {cost} de ouro estimados.")
                     self.notify("executando")
             if not any(it.id not in self.state.purchased_in_rotation for it in self.active_items()):
                 break
@@ -222,7 +226,7 @@ class BotRunner:
                 driver.ensure_focus()
                 if not any(can_purchase(item.price_gold, self.state, self.limits()[1])
                            for item in self.active_items()):
-                    self.state.reason = "ouro insuficiente para todos os itens ativos"
+                    self.state.reason = "O saldo ou limite de ouro não cobre o custo de nenhum item ativo."
                     return
                 self.log("Procurando itens na loja atual…")
                 driver.click_safe()
@@ -233,10 +237,10 @@ class BotRunner:
                     continue
                 if not any(can_purchase(item.price_gold, self.state, self.limits()[1])
                            for item in self.active_items()):
-                    self.state.reason = "limite de ouro / saldo insuficiente"
+                    self.state.reason = "O saldo ou limite de ouro não permite novas compras."
                     return
                 if not can_refresh(self.config.budget.refresh_cost, self.state, self.limits()[0]):
-                    self.state.reason = "limite de gemas para renovar"
+                    self.state.reason = "As gemas restantes no orçamento não cobrem outra renovação."
                     return
                 self._wait_ui_resume()
                 if not self._try_refresh(driver):
@@ -267,7 +271,8 @@ class BotRunner:
             driver = factory(self.config, self.templates_dir, self.check_stop, self.pause, self.log)
             driver.prepare()
             self._driver = driver
-            self.log("Automação inicializa em 3 segundos. Mantenha a loja visível.")
+            self.log("Automação inicializa em 3 segundos. Mantenha a loja visível.",
+                     activity="O bot começa em 3 segundos. Deixe a loja visível.")
             self.pause(3.0)
             self.notify("executando")
             self._loop(driver)
@@ -279,15 +284,18 @@ class BotRunner:
             self.state.uncertain_actions.append(str(exc))
             self.state.reason = "transação/renovação com resultado incerto; conferir saldos no jogo"
             self.state.status = "resultado_incerto"
-            self.log(f"AÇÃO INCERTA: {exc}", "error")
+            self.log(f"AÇÃO INCERTA: {exc}", "error",
+                     activity="A ação não pôde ser confirmada. Confira os itens e saldos no jogo antes de reiniciar.")
         except (WindowInvalid, BotError) as exc:
             self.state.reason = str(exc)
             self.state.status = "erro"
-            self.log(f"Execução interrompida: {exc}", "error")
+            self.log(f"Execução interrompida: {exc}", "error",
+                     activity=f"O bot foi interrompido. {exc}")
         except Exception as exc:
             self.state.reason = f"falha inesperada: {type(exc).__name__}: {exc}"
             self.state.status = "erro"
-            self.log(self.state.reason, "error")
+            self.log(self.state.reason, "error",
+                     activity="O bot parou por um erro inesperado. Consulte o log de diagnóstico.")
         finally:
             self.state.finished_at = datetime.now().isoformat(timespec="seconds")
             self.notify(self.state.status)

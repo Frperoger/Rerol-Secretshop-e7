@@ -22,6 +22,7 @@ from app.config import (add_history, clear_history, data_directory, load_config,
                         prepare_templates, read_history, remove_history_rows,
                         save_config, save_template_scale, user_templates)
 from app.core.budget import validate_config
+from app.logging_setup import log_diagnostic
 from app.models import AppConfig, BudgetConfig, CalibrationConfig, ItemConfig, BotError
 from app.ui.controller import BotController
 from app.ui.diagnostics import analyze_image, validate_item_templates
@@ -350,14 +351,14 @@ class MainWindow(QMainWindow):
         self._build_calibration_tab()
         self._build_reports_tab()
         self._make_tray()
-        self.append_log("Aplicação pronta. Verifique o orçamento e a calibração antes de iniciar.", "info")
         if self._startup_error:
-            self.append_log(self._startup_error, "error")
+            log_diagnostic(self._startup_error, "error")
             QMessageBox.warning(self, "Configuração anterior inválida", self._startup_error)
         try:
             prepare_templates(self.cfg)
         except OSError as exc:
-            self.append_log(f"Templates: {exc}", "warn")
+            log_diagnostic(f"Falha ao preparar templates: {exc}", "warn")
+            self.append_log("Não foi possível preparar as imagens da loja. Confira a pasta de templates na aba Itens.", "warn")
         self._refresh_template_labels()
         self._refresh_item_thumbnails()
         self._update_budget_metrics()
@@ -813,7 +814,6 @@ class MainWindow(QMainWindow):
         if self.controller.running:
             try:
                 self.controller.set_item_enabled(ident, enabled)
-                self.append_log(f"Item {ident} {'habilitado' if enabled else 'desabilitado'} em tempo real.")
             except (ValueError, BotError) as exc:
                 check = self.live_item_checks[ident]
                 with QSignalBlocker(check):
@@ -895,7 +895,6 @@ class MainWindow(QMainWindow):
             self.templates_dir = user_templates(cfg)
             self.items_save_status.setText(f"✓ {len(cfg.items)} item(ns) salvo(s); {len(checked)} PNGs encontrados e validados.")
             self._refresh_item_thumbnails()
-            self.append_log("Itens e templates conferidos e salvos.", "ok")
             QMessageBox.information(self, "Itens salvos",
                 f"Configuração salva com sucesso.\n"
                 f"{len(cfg.items)} itens cadastrados e {len(checked)} imagens verificadas.")
@@ -932,7 +931,6 @@ class MainWindow(QMainWindow):
             self.preview.set_background(pix)
             self.screenshot_path = path
             self.capture_label.setText(path)
-            self.append_log("Imagem carregada na área de clique seguro.")
 
     def capture_game_window(self):
         if self.controller.running:
@@ -966,7 +964,6 @@ class MainWindow(QMainWindow):
             self.screenshot_path = str(file_path)
             self.capture_label.setText(str(file_path))
             self.preview.set_background(QPixmap(str(file_path)))
-            self.append_log("Janela capturada sem clicar no jogo.", "ok")
         except Exception as exc:
             QMessageBox.warning(self, "Captura indisponível", str(exc))
         finally:
@@ -1002,7 +999,7 @@ class MainWindow(QMainWindow):
         self._update_area_preview()
         self._update_overlay_preview()
         self._hotkey_preview()
-        self.append_log("Valores padrão carregados; clique em Salvar calibração para persistir.")
+        self.settings_save_status.setText("Padrões restaurados. Salve a calibração para aplicar.")
 
     def _make_tray(self):
         pix = QPixmap(str(bundled_root() / "assets" / "app_icon.png"))
@@ -1166,7 +1163,6 @@ class MainWindow(QMainWindow):
             else:
                 lines.append("Sem escala validada para salvar.")
             self.diagnostic_label.setText("\n".join(lines))
-            self.append_log("Calibração de imagem concluída sem mover o mouse.", "info")
         except Exception as exc:
             QMessageBox.warning(self, "Falha no diagnóstico", str(exc))
 
@@ -1206,7 +1202,6 @@ class MainWindow(QMainWindow):
             self._refresh_template_labels()
             self._refresh_item_thumbnails()
             self._update_budget_metrics()
-            self.append_log("Configurações validadas e salvas no AppData.", "ok")
             notice = (" Atalho incompleto: o atalho anterior foi mantido."
                       if hotkey_kept else "")
             self.settings_save_status.setText("✓ Configurações salvas no AppData." + notice)
@@ -1240,15 +1235,15 @@ class MainWindow(QMainWindow):
                 try:
                     self.hotkey_handles.append(keyboard.add_hotkey(custom, self.controller.stop))
                 except Exception as exc:
-                    self.append_log(f"Atalho personalizado indisponível: {exc}. "
-                                    "Ctrl+Alt+Q continua ativo.", "warn")
-            self.append_log("Atalhos de parada ativos: " + DEFAULT_HOTKEY +
-                            (" e " + custom if custom != DEFAULT_HOTKEY else ""))
+                    log_diagnostic(f"Falha no atalho personalizado: {exc}", "warn")
+                    self.append_log("O atalho personalizado está indisponível. Use Ctrl+Alt+Q para parar.", "warn")
+            log_diagnostic("Atalhos de parada registrados: " + DEFAULT_HOTKEY +
+                           (" e " + custom if custom != DEFAULT_HOTKEY else ""))
         except Exception as exc:
             self.hotkey_handles = []
             self.hotkey_module = None
-            self.append_log(f"Atalho global indisponível: {exc}. Use Parar na bandeja "
-                            "ou o FailSafe do mouse (canto superior esquerdo).", "warn")
+            log_diagnostic(f"Atalho global indisponível: {exc}", "warn")
+            self.append_log("Atalho de emergência indisponível. Use o botão Parar no app ou na bandeja.", "warn")
 
     def _unregister_hotkey(self):
         if self.hotkey_module is not None:
@@ -1285,13 +1280,13 @@ class MainWindow(QMainWindow):
                         "Não foi possível excluir o painel da captura do jogo. "
                         "Acompanhe pela bandeja.",
                         QSystemTrayIcon.MessageIcon.Warning, 4000)
-                self.append_log("O Windows não conseguiu tornar o pop-up invisível à "
-                                "captura. Painel desativado para proteger o bot; "
-                                "monitoramento disponível pela bandeja.", "warn")
+                log_diagnostic("O Windows não conseguiu excluir o painel compacto das capturas.", "warn")
+                self.append_log("Painel compacto desativado. Acompanhe o bot pelo app ou pela bandeja.", "warn")
         except Exception as exc:
             self.overlay.hide()
             self._overlay_blocked = True
-            self.append_log(f"Pop-up desativado com segurança: {exc}", "warn")
+            log_diagnostic(f"Falha ao abrir o painel compacto: {exc}", "warn")
+            self.append_log("Painel compacto indisponível. Acompanhe o bot pelo app ou pela bandeja.", "warn")
 
     def _set_running(self, running: bool):
         self.btn_start.setEnabled(not running)
@@ -1378,7 +1373,8 @@ class MainWindow(QMainWindow):
         try:
             add_history(result)
         except OSError as exc:
-            self.append_log(f"Falha ao salvar histórico: {exc}", "warn")
+            log_diagnostic(f"Falha ao salvar histórico: {exc}", "warn")
+            self.append_log("O relatório desta execução não pôde ser salvo no histórico.", "warn")
         self.report_label.setText(
             f"Status: {result['status']}\n"
             f"Renovações: {fmt(result['refreshes'])} · Gemas estimadas: {fmt(result['gems_estimated'])}\n"
@@ -1390,8 +1386,11 @@ class MainWindow(QMainWindow):
         self._update_history()
         self.tabs.setCurrentIndex(4)
         self._display_panel()
-        self.append_log("Execução encerrada: " + result.get("reason", result.get("status", "")), "info")
-        if result["status"] == "resultado_incerto":
+        if result["status"] == "concluido":
+            self.append_log(f"Execução concluída. {result['reason']}")
+        elif result["status"] == "cancelado":
+            self.append_log("Execução cancelada.")
+        elif result["status"] == "resultado_incerto":
             QMessageBox.warning(self, "Resultado incerto",
                                 "Uma ação foi enviada, mas não pôde ser verificada. "
                                 "Confira os saldos/itens do jogo antes de iniciar outra execução.")
@@ -1413,7 +1412,6 @@ class MainWindow(QMainWindow):
             deleted = remove_history_rows(set(selected))
             self._update_history()
             self.history_status.setText(f"✓ {deleted} registro(s) removido(s) do histórico.")
-            self.append_log(f"{deleted} registro(s) do histórico excluído(s).", "ok")
         except OSError as exc:
             QMessageBox.warning(self, "Falha ao excluir histórico", str(exc))
 
@@ -1428,7 +1426,6 @@ class MainWindow(QMainWindow):
             deleted = clear_history()
             self._update_history()
             self.history_status.setText(f"✓ Histórico limpo ({deleted} registro(s)).")
-            self.append_log("Histórico de execuções apagado.", "ok")
         except OSError as exc:
             QMessageBox.warning(self, "Falha ao limpar histórico", str(exc))
 
