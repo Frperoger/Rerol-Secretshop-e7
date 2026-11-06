@@ -420,7 +420,7 @@ class MainWindow(QMainWindow):
         self.metric_labels = {}
         stats = QGridLayout()
         metrics = [("refreshes", "Renovações", None),
-                   ("purchases_verified", "Compras verificadas", None),
+                   ("purchases_sent", "Compras enviadas", None),
                    ("gems_estimated", "Gemas estimadas", "gems"),
                    ("gold_estimated", "Ouro estimado", "gold")]
         for idx, (key, title, currency) in enumerate(metrics):
@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
         self.item_table = QTableWidget(0, 9)
         self.item_table.setHorizontalHeaderLabels([
             "Ativo", "ID", "Item", "Preço (ouro)", "Miniatura",
-            "Ícone", "Botão comprar", "Confirmação", "Vendido (opcional)"])
+            "Ícone", "Botão comprar", "Confirmação", "Vendido (diagnóstico)"])
         self.item_table.verticalHeader().setVisible(False)
         self.item_table.setAlternatingRowColors(True)
         self.item_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
@@ -746,7 +746,7 @@ class MainWindow(QMainWindow):
         history, inner = panel("Histórico de execuções")
         self.history_table = QTableWidget(0, 6)
         self.history_table.setHorizontalHeaderLabels([
-            "Início", "Renovações", "Compras verificadas", "Gemas estimadas",
+            "Início", "Renovações", "Compras", "Gemas estimadas",
             "Ouro estimado", "Motivo de parada"])
         self.history_table.verticalHeader().setVisible(False)
         self.history_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -1379,10 +1379,10 @@ class MainWindow(QMainWindow):
         self.report_label.setText(
             f"Status: {result['status']}\n"
             f"Renovações: {fmt(result['refreshes'])} · Gemas estimadas: {fmt(result['gems_estimated'])}\n"
-            f"Compras verificadas: {result['purchases_verified']} · Ouro estimado: {fmt(result['gold_estimated'])}\n"
-            f"Por item: {result['purchases_by_item']}\n"
+            f"Compras enviadas: {result['purchases_sent']} · Ouro estimado: {fmt(result['gold_estimated'])}\n"
+            f"Envios por item: {result['purchases_by_item']}\n"
             f"Motivo: {result['reason']}\n"
-            "A contabilidade estima gastos pela ação e NÃO confere os saldos reais do jogo."
+            "Os gastos são estimados a partir das ações enviadas."
         )
         self._update_history()
         self.tabs.setCurrentIndex(4)
@@ -1433,7 +1433,7 @@ class MainWindow(QMainWindow):
         self.history_table.setRowCount(len(history))
         for row, result in enumerate(history):
             values = (result.get("started_at", ""), str(result.get("refreshes", 0)),
-                      str(result.get("purchases_verified", 0)),
+                      str(result.get("purchases_sent", result.get("purchases_verified", 0))),
                       fmt(result.get("gems_estimated", 0)),
                       fmt(result.get("gold_estimated", 0)), result.get("reason", ""))
             for col, text in enumerate(values):

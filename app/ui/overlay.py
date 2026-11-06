@@ -47,7 +47,7 @@ class StatusOverlay(QWidget):
         box.addLayout(header)
         self.status_label = QLabel("Preparando…")
         self.cost_label = QLabel("Gemas: 0  |  Ouro: 0")
-        self.counter_label = QLabel("Renovações: 0  |  Compras: 0")
+        self.counter_label = QLabel("Renovações: 0  |  Envios: 0")
         for label in (self.status_label, self.cost_label, self.counter_label):
             box.addWidget(label)
 
@@ -70,7 +70,7 @@ class StatusOverlay(QWidget):
             f"Ouro: {fmt(state.get('gold_estimated', 0))}")
         self.counter_label.setText(
             f"Renovações: {fmt(state.get('refreshes', 0))}  |  "
-            f"Compras: {fmt(state.get('purchases_verified', 0))}")
+            f"Envios: {fmt(state.get('purchases_sent', 0))}")
 
     def position_over_game(self, game_rect: tuple, area: tuple):
         # QRect Win32 usa pixels físicos; Qt Widgets utiliza coordenadas lógicas.

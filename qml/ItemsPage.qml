@@ -65,7 +65,7 @@ ScrollView {
                             model: [
                                 ["id", "ID"], ["name", "Nome"], ["price", "Preço em ouro"], ["icon", "Ícone PNG"],
                                 ["buy", "Botão de compra PNG"], ["confirm", "Confirmação PNG"],
-                                ["sold", "Vendido PNG (opcional)"]
+                                ["sold", "Vendido PNG (diagnóstico)"]
                             ]
                             delegate: LabeledField {
                                 required property var modelData

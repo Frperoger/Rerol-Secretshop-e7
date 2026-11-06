@@ -45,7 +45,7 @@ class ItemConfig:
     icon_template: str = ""
     buy_template: str = ""
     price_template: str = ""
-    sold_template: str = ""  # opcional, evidência visual específica da compra
+    sold_template: str = ""  # opcional, usado no diagnóstico de imagens
 
     @classmethod
     def standard(cls, ident: str, name: str, price: int) -> "ItemConfig":
@@ -114,14 +114,14 @@ class RunState:
     reason: str = ""
     refreshes: int = 0
     gems_estimated: int = 0
-    purchases_verified: int = 0
+    purchases_sent: int = 0
     gold_estimated: int = 0
     purchases_by_item: dict[str, int] = field(default_factory=dict)
     uncertain_actions: list[str] = field(default_factory=list)
-    # Itens já comprados nesta rotação, inclusive após pausa por foco.
-    purchased_in_rotation: set[str] = field(default_factory=set, repr=False)
+    # Itens com compra enviada nesta rotação, inclusive após pausa por foco.
+    sent_in_rotation: set[str] = field(default_factory=set, repr=False)
 
     def to_dict(self) -> dict:
         data = asdict(self)
-        data.pop("purchased_in_rotation", None)
+        data.pop("sent_in_rotation", None)
         return data

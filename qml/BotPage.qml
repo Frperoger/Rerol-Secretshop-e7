@@ -109,7 +109,7 @@ RowLayout {
                 rowSpacing: 10
                 Repeater {
                     model: [
-                        ["refreshes", "Renovações", ""], ["purchases_verified", "Compras verificadas", ""],
+                        ["refreshes", "Renovações", ""], ["purchases_sent", "Compras enviadas", ""],
                         ["gems_estimated", "Gemas estimadas", "gems"], ["gold_estimated", "Ouro estimado", "gold"]
                     ]
                     delegate: ColumnLayout {

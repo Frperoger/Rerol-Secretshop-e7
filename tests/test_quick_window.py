@@ -158,10 +158,11 @@ def test_compact_overlay_returns_after_safe_pause(quick, monkeypatch):
 
 def test_qml_item_and_history_actions_reuse_saved_data(quick, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
-    add_history({"started_at": "primeira", "reason": "exemplo"})
-    add_history({"started_at": "segunda", "reason": "exemplo"})
+    add_history({"started_at": "primeira", "reason": "exemplo", "purchases_verified": 2})
+    add_history({"started_at": "segunda", "reason": "exemplo", "purchases_sent": 3})
     quick._update_history()
     assert len(quick.history) == 2
+    assert [record[2] for record in quick.history] == ["3", "2"]
     quick.deleteHistory([0])
     assert [record["started_at"] for record in read_history()] == ["primeira"]
     quick.toggleItem(0, False)

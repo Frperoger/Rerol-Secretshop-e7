@@ -50,7 +50,7 @@ def test_runner_purchase_and_stop_on_gems():
     data = runner.run()
     assert data["status"] == "concluido"
     assert data["refreshes"] == 0
-    assert data["purchases_verified"] == 1
+    assert data["purchases_sent"] == 1
     assert data["gold_estimated"] == 184_000
     assert records[0].refreshes == 0
 
@@ -67,7 +67,7 @@ def test_uncertain_action_stops_without_counting_purchase(caplog):
     runner._driver_factory = change_factory
     data = runner.run()
     assert data["status"] == "resultado_incerto"
-    assert data["purchases_verified"] == 0
+    assert data["purchases_sent"] == 0
     assert data["gold_estimated"] == 0
     assert len(data["uncertain_actions"]) == 1
     assert records[0].refreshes == 0
@@ -99,7 +99,7 @@ def test_activity_shows_purchases_and_focus_without_driver_details(caplog):
         ("O bot começa em 3 segundos. Deixe a loja visível.", "info"),
         ("Bot pausado. Deixe a loja visível e volte ao jogo para continuar.", "warn"),
         ("Bot retomado.", "info"),
-        ("Compra confirmada: Item 1 · 184.000 de ouro estimados.", "ok"),
+        ("Compra enviada · Item 1 · 184.000 de ouro estimados.", "ok"),
     ]
     assert "Template opcional ausente: vendido.png" in caplog.text
     assert "Solicitando renovação da loja" in caplog.text
@@ -119,7 +119,36 @@ def test_focus_loss_resumes_before_any_action():
     runner._driver_factory = factory
     data = runner.run()
     assert data["status"] == "concluido"
-    assert data["purchases_verified"] == 1
+    assert data["purchases_sent"] == 1
+
+
+def test_sent_item_is_skipped_during_scrolls_until_store_renews():
+    cfg = AppConfig()
+    cfg.budget.gems_available = cfg.budget.gems_limit = 3
+    runner, _ = create_runner(cfg)
+    steps = []
+
+    class Shop(FakeDesktop):
+        def try_purchase(self, item):
+            steps.append((self.refreshes, self.scrolls, item.id))
+            return item.id == "item1" or (self.refreshes == 1 and self.scrolls == 1)
+
+        def refresh(self):
+            steps.append((self.refreshes, self.scrolls, "renovar"))
+            super().refresh()
+            self.scrolls = 0
+
+    runner._driver_factory = Shop
+    data = runner.run()
+    assert data["status"] == "concluido"
+    assert data["refreshes"] == 1
+    assert data["purchases_sent"] == 3
+    assert data["gold_estimated"] == 648_000
+    assert steps == [
+        (0, 0, "item1"), (0, 0, "item2"), (0, 1, "item2"), (0, 2, "item2"),
+        (0, 2, "renovar"),
+        (1, 0, "item1"), (1, 0, "item2"), (1, 1, "item2"),
+    ]
 
 
 def test_cancel_does_not_lose_completed_refresh():

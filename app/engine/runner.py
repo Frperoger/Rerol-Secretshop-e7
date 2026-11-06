@@ -156,16 +156,16 @@ class BotRunner:
                 return False
             self._reserved_gold = item.price_gold
 
-        purchased = False
+        sent = False
         try:
-            purchased = driver.try_purchase(item)
-            return purchased
+            sent = driver.try_purchase(item)
+            return sent
         finally:
             with self._live_lock:
-                if purchased:
-                    self.state.purchased_in_rotation.add(item.id)
+                if sent:
+                    self.state.sent_in_rotation.add(item.id)
                     self.state.gold_estimated += item.price_gold
-                    self.state.purchases_verified += 1
+                    self.state.purchases_sent += 1
                     self.state.purchases_by_item[item.name] = (
                         self.state.purchases_by_item.get(item.name, 0) + 1)
                 self._reserved_gold = 0
@@ -177,14 +177,15 @@ class BotRunner:
             for item in self.active_items():
                 self.check_stop()
                 self._wait_ui_resume()
-                if item.id in self.state.purchased_in_rotation:
+                if item.id in self.state.sent_in_rotation:
                     continue
                 if self._try_purchase(driver, item):
                     cost = f"{item.price_gold:,}".replace(",", ".")
-                    self.log(f"[{item.name}] Compra verificada na interface; custo estimado {cost} ouro.", "ok",
-                             activity=f"Compra confirmada: {item.name} · {cost} de ouro estimados.")
+                    self.log(f"[{item.name}] Compra enviada. Custo estimado de {cost} de ouro.", "ok",
+                             activity=f"Compra enviada · {item.name} · {cost} de ouro estimados.")
                     self.notify("executando")
-            if not any(it.id not in self.state.purchased_in_rotation for it in self.active_items()):
+                    self.pause(self.config.calibration.pause_min, self.config.calibration.pause_max)
+            if not any(it.id not in self.state.sent_in_rotation for it in self.active_items()):
                 break
             if scroll < self.config.calibration.max_scrolls:
                 self._wait_ui_resume()
@@ -210,7 +211,7 @@ class BotRunner:
                 if refreshed:
                     self.state.gems_estimated += cost
                     self.state.refreshes += 1
-                    self.state.purchased_in_rotation.clear()
+                    self.state.sent_in_rotation.clear()
                 self._reserved_gems = 0
 
     def _loop(self, driver):
@@ -249,7 +250,7 @@ class BotRunner:
                 self.pause(1.0, 1.8)
             except FocusLost:
                 self._await_focus(driver)
-                # Não renovamos ou validamos compra após perder foco: nova varredura.
+                # Retoma com uma nova varredura da mesma rotação.
                 continue
 
     def run(self) -> dict:

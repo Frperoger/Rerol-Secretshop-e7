@@ -152,23 +152,17 @@ class DesktopIO:
             self.pause(0.12, 0.15)
 
     def try_purchase(self, item) -> bool:
-        """Somente confirma compra quando a interface demonstrar mudança pós-transação.
-
-        Nunca retorna sucesso apenas porque o mouse clicou. Após o primeiro clique,
-        qualquer falha torna a operação INCERTA e obriga parar a execução.
-        """
-        before = self.capture()
-        icon = self.match(before, item.icon_template)
+        """Envia a compra até o clique final na confirmação de preço."""
+        frame = self.capture()
+        icon = self.match(frame, item.icon_template)
         if not icon:
             return False
-        button = self.same_row(before, item.buy_template, icon)
+        button = self.same_row(frame, item.buy_template, icon)
         if not button:
             self.log(f"[{item.name}] Ícone presente, botão não alinhado: ignorado.", "warn")
             return False
         self.log(f"[{item.name}] Ícone e botão localizados "
                  f"(ícone {icon.confidence:.2f}, botão {button.confidence:.2f}).", "info")
-        check_sold = (item.sold_template in self.templates
-                      and self.same_row(before, item.sold_template, icon) is None)
         committed = False
         try:
             self.click_match(button, item.lower_half)
@@ -180,79 +174,12 @@ class DesktopIO:
             self.log(f"[{item.name}] Confirmação de preço reconhecida "
                      f"(confiança {confirm_price.confidence:.3f}).", "info")
             self.click_match(confirm_price)
-            deadline = time.monotonic() + self.config.calibration.modal_timeout
-            stable_confirmations = 0
-            generic_clicked = False
-            while True:
-                frame = self.capture()
-                generic = self.match(frame, "confirmar.png")
-                if generic is not None and not generic_clicked:
-                    self.click_match(generic)
-                    generic_clicked = True
-                    stable_confirmations = 0
-                    deadline = time.monotonic() + self.config.calibration.modal_timeout
-                    continue
-                dialog_open = generic is not None or self.match(frame, item.price_template) is not None
-                if not dialog_open and self._purchase_visible(before, frame, item, icon, button, check_sold):
-                    stable_confirmations += 1
-                    if stable_confirmations >= 2:
-                        return True
-                else:
-                    stable_confirmations = 0
-                if time.monotonic() >= deadline:
-                    break
-                self.pause(0.12, 0.15)
-            if dialog_open:
-                raise UncertainAction("O diálogo de compra ainda estava visível.")
-            raise UncertainAction("Os diálogos fecharam, mas a linha comprada não mostrou um estado de venda verificável.")
+            return True
         except Exception as exc:
             if committed or isinstance(exc, UncertainAction):
                 raise UncertainAction(f"[{item.name}] Compra potencialmente enviada, sem confirmação: {exc}",
                                       operation=f"a compra de {item.name}") from exc
             raise
-
-    def _nearby_match(self, frame, name, original):
-        dx = max(4, original.width // 8)
-        dy = max(4, original.height // 8)
-        roi = (original.x - dx, original.y - dy,
-               original.x + original.width + dx, original.y + original.height + dy)
-        return self.match(frame, name, roi)
-
-    def _purchase_visible(self, before, frame, item, original_icon, original_button, check_sold):
-        if check_sold and self.same_row(frame, item.sold_template, original_icon):
-            return True
-        # Uma cópia do item em outra linha não substitui o ícone da linha comprada.
-        icon = self._nearby_match(frame, item.icon_template, original_icon)
-        if icon is None:
-            return False
-        button = self._nearby_match(frame, item.buy_template, original_button)
-        if button is None:
-            return self.same_row(frame, item.buy_template, icon) is None
-        return self._button_became_gray(before, frame, original_icon, icon, original_button, button)
-
-    @staticmethod
-    def _button_became_gray(before, frame, original_icon, icon, original_button, button):
-        """Reconhece o botão desativado mesmo quando seu contorno continua igual."""
-        import numpy as np
-
-        def crop(image, match, *, lower_half=False):
-            top = match.y + (match.height // 2 if lower_half else 0)
-            return image[top:match.y + match.height, match.x:match.x + match.width]
-
-        old_icon, new_icon = crop(before, original_icon), crop(frame, icon)
-        # Uma alteração global (por exemplo, a loja toda escurecida por um modal)
-        # não é evidência de que só o botão daquela linha ficou desativado.
-        if (old_icon.shape != new_icon.shape or not old_icon.size
-                or np.abs(old_icon.astype("int16") - new_icon).mean() > 12):
-            return False
-        old_button = crop(before, original_button, lower_half=True).astype("int16")
-        new_button = crop(frame, button, lower_half=True)
-        if old_button.shape != new_button.shape or not old_button.size:
-            return False
-        blue, green, red = np.moveaxis(old_button, 2, 0)
-        green_pixels = (green - red >= 15) & (green - blue >= 15)
-        return bool(green_pixels.mean() >= 0.20
-                    and (np.ptp(new_button[green_pixels], axis=1) <= 16).mean() >= 0.85)
 
     def refresh(self) -> None:
         renew = self.wait_match("renovar.png", self.config.calibration.modal_timeout)

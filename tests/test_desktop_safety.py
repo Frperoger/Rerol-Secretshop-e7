@@ -1,8 +1,6 @@
 import types
 import sys
 import pytest
-import cv2
-import numpy as np
 from pathlib import Path
 from app.core.vision import Match
 from app.models import AppConfig, BotError, FocusLost, StopRequested, UncertainAction
@@ -135,73 +133,27 @@ def test_cancel_mid_click_releases_mouse_button(monkeypatch, transaction):
     assert state == {"down": True, "up": True}
 
 
-def test_purchase_requires_stable_post_transaction_evidence():
+def test_purchase_returns_immediately_after_final_click():
     d = driver()
     icon = Match(5, 20, 24, 24, .96)
     button = Match(50, 20, 35, 22, .96)
     price = Match(60, 40, 40, 28, .97)
-    counts = {"captures": 0, "clicks": 0, "buy_lookups": 0}
-    def capture():
-        counts["captures"] += 1
-        return object()
-    def match(frame, name, roi=None):
-        return icon if name == "item1_icone.png" else None
-    def aligned(frame, name, item_icon):
-        counts["buy_lookups"] += 1
-        return button if counts["buy_lookups"] == 1 else None
-    def wait(name, *args, **kwargs):
-        return price if name == "item1_comprar_preco.png" else None
-    d.capture = capture
-    d.match = match
-    d.same_row = aligned
-    d.click_match = lambda *args: counts.__setitem__("clicks", counts["clicks"] + 1)
-    d.wait_match = wait
-    assert d.try_purchase(d.config.items[0]) is True
-    assert counts["clicks"] == 2
-    assert counts["captures"] >= 3
-
-
-@pytest.mark.parametrize("dialog", ["absent", "closes", "stuck"])
-def test_purchase_polls_for_optional_dialog_and_result_together(monkeypatch, dialog):
-    d = driver()
     item = d.config.items[0]
-    icon = Match(5, 20, 24, 24, .96)
-    buy = Match(50, 20, 35, 22, .96)
-    price = Match(60, 40, 40, 28, .97)
-    generic = object()
-    clicks, waits = [], []
-    elapsed = 0.0
+    snapshots = iter([object()])
+    clicks = []
 
-    def pause(a, b):
-        nonlocal elapsed
-        waits.append((a, b))
-        elapsed += (a + b) / 2
+    def wait(name, timeout):
+        assert name == item.price_template
+        assert clicks == [(button, True)]
+        return price
 
-    def match(frame, name, roi=None):
-        if name == item.icon_template:
-            return icon
-        if name == "confirmar.png" and (clicks == [buy, price] or
-                                       (clicks == [buy, price, generic] and dialog == "stuck")):
-            return generic if dialog != "absent" else None
-        return None
-
-    monkeypatch.setattr("app.platform.desktop.time.monotonic", lambda: elapsed)
-    monkeypatch.setattr("app.platform.desktop.best_match", lambda *_: price if clicks == [buy] else None)
-    d.templates[item.price_template] = object()
-    d.pause = pause
-    d.capture = object
-    d.match = match
-    d.same_row = lambda *_: None if clicks else buy
-    d.click_match = lambda match, *_: clicks.append(match)
-    if dialog == "stuck":
-        with pytest.raises(UncertainAction) as exc:
-            d.try_purchase(item)
-        assert exc.value.operation == "a compra de Item 1"
-    else:
-        assert d.try_purchase(item)
-        # Duas capturas estáveis separadas por uma pausa de polling.
-        assert waits == [(0.12, 0.15)]
-    assert clicks == ([buy, price] if dialog == "absent" else [buy, price, generic])
+    d.capture = lambda: next(snapshots)
+    d.match = lambda frame, name: icon if name == item.icon_template else None
+    d.same_row = lambda *_: button
+    d.click_match = lambda match, lower_half=False: clicks.append((match, lower_half))
+    d.wait_match = wait
+    assert d.try_purchase(item) is True
+    assert clicks == [(button, True), (price, False)]
 
 
 def test_cached_scale_must_recognize_renew_before_any_input():
@@ -223,41 +175,3 @@ def test_focus_loss_after_action_is_uncertain():
     d.wait_match = lambda *args: (_ for _ in ()).throw(FocusLost("alt-tab"))
     with pytest.raises(UncertainAction):
         d.try_purchase(d.config.items[0])
-
-
-def test_post_purchase_uses_original_row_and_recognizes_disabled_button():
-    d = driver()
-    item = d.config.items[0]
-    templates = Path(__file__).resolve().parents[1] / "templates"
-    for name in (item.icon_template, item.buy_template):
-        d.templates[name] = cv2.imread(str(templates / name))
-    rng = np.random.default_rng(41)
-    before = rng.integers(0, 25, (560, 850, 3), dtype=np.uint8)
-    for name, (x, y) in ((item.icon_template, (40, 45)), (item.buy_template, (510, 50))):
-        template = d.templates[name]
-        h, w = template.shape[:2]
-        before[y:y+h, x:x+w] = template
-    icon = d.match(before, item.icon_template)
-    buy = d.same_row(before, item.buy_template, icon)
-    assert icon is not None and buy is not None
-    assert not d._purchase_visible(before, before, item, icon, buy, False)
-
-    after = before.copy()
-    other_y = 310
-    after[other_y:other_y+icon.height, icon.x:icon.x+icon.width] = d.templates[item.icon_template]
-    after[icon.y, icon.x] = (255, 255, 255)
-    button = after[buy.y:buy.y+buy.height, buy.x:buy.x+buy.width]
-    gray = cv2.cvtColor(button[buy.height // 2:], cv2.COLOR_BGR2GRAY)
-    button[buy.height // 2:] = gray[:, :, None]
-    assert d.match(after, item.icon_template).y == other_y
-    assert d._nearby_match(after, item.buy_template, buy) is not None
-    assert d._purchase_visible(before, after, item, icon, buy, False)
-
-    # O botão cinza sozinho é insuficiente se a loja inteira tiver escurecido.
-    original_row_icon = after[icon.y:icon.y+icon.height, icon.x:icon.x+icon.width]
-    original_row_icon[:] = (original_row_icon * 0.5).astype(np.uint8)
-    assert d._nearby_match(after, item.icon_template, icon) is not None
-    assert not d._purchase_visible(before, after, item, icon, buy, False)
-
-    after[icon.y:icon.y+icon.height, icon.x:icon.x+icon.width] = 0
-    assert not d._purchase_visible(before, after, item, icon, buy, False)

@@ -52,7 +52,7 @@ Window {
             }
             Label {
                 text: "Renovações: " + (popup.metrics.refreshes || 0) +
-                      "  |  Compras: " + (popup.metrics.purchases_verified || 0)
+                      "  |  Envios: " + (popup.metrics.purchases_sent || 0)
                 color: "#edf1f7"
             }
             Item { Layout.fillHeight: true }
