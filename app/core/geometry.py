@@ -42,3 +42,20 @@ def choose_safe_point(rect: Rect, area: tuple[float, float, float, float]) -> tu
     if not rect.contains(x, y):
         raise ValueError("Área segura produz ponto fora da janela.")
     return x, y
+
+
+def buy_button_action_region(match):
+    """Região Comprar do PNG de linha única, sem tocar no seletor 1/1.
+
+    Compartilhada por TODOS os itens, independentemente do identificador.
+    """
+    from dataclasses import replace
+
+    if match.width <= 0 or match.height <= 0:
+        raise ValueError("Botão de compra com dimensões inválidas.")
+    x0 = round(match.width * 0.55)
+    x1 = round(match.width * 0.92)
+    y0 = round(match.height * 0.22)
+    y1 = round(match.height * 0.78)
+    return replace(match, x=match.x + x0, y=match.y + y0,
+                   width=max(1, x1 - x0), height=max(1, y1 - y0))

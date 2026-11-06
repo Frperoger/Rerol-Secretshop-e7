@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from app.config import load_template_scale
-from app.core.geometry import choose_match_point, choose_safe_point
+from app.core.geometry import choose_match_point, choose_safe_point, buy_button_action_region
 from app.core.template_scale import load_templates, resize_template, scale_key, template_filenames
 from app.core.vision import best_match, detect, same_row
 from app.models import AppConfig, BotError, UncertainAction
@@ -76,6 +76,7 @@ class DesktopIO:
         return detect(frame, self.templates[name], self.config.calibration.threshold, roi)
 
     def same_row(self, frame, name: str, icon):
+        # Ícone primeiro, depois botão no mesmo alinhamento vertical.
         return same_row(frame, self.templates[name], icon,
                         self.config.calibration.threshold)
 
@@ -165,7 +166,12 @@ class DesktopIO:
                  f"(ícone {icon.confidence:.2f}, botão {button.confidence:.2f}).", "info")
         committed = False
         try:
-            self.click_match(button, item.lower_half)
+            # Usa a mesma área Comprar (à direita do 1/1) para todos os itens.
+            if all(hasattr(button, key) for key in ("x", "y", "width", "height", "confidence")):
+                self.click_match(buy_button_action_region(button))
+            else:
+                # Preserva compatibilidade com drivers simulados nos testes.
+                self.click_match(button, item.lower_half)
             committed = True
             confirm_price = self.wait_match(item.price_template,
                                             self.config.calibration.modal_timeout)

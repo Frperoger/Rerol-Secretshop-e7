@@ -48,8 +48,32 @@ def best_match(frame, template, roi: tuple[int, int, int, int] | None = None) ->
     return Match(x + ox, y + oy, width, height, float(score))
 
 
-def same_row(frame, template, icon: Match, threshold: float) -> Match | None:
-    cy = icon.y + icon.height / 2
-    half = icon.height * _SAME_ROW_FACTOR / 2
-    return detect(frame, template, threshold,
-                  roi=(0, max(0, int(cy - half)), frame.shape[1], min(frame.shape[0], int(cy + half))))
+def same_row(frame, template, icon: Match, threshold: float, factor: float = 1.6) -> Match | None:
+    """Localiza botão à DIREITA do ícone, na MESMA linha de item.
+
+    O ROI acomoda o template inteiro, mas somente posições cujo CENTRO
+    coincide com o centro vertical do ícone são elegíveis. Evita associar
+    o botão visualmente idêntico da linha vizinha.
+    """
+    from math import ceil, floor
+
+    if frame is None or template is None or icon is None or frame.size == 0 or template.size == 0:
+        return None
+    h, w = template.shape[:2]
+    if h <= 0 or w <= 0 or icon.height <= 0 or icon.width <= 0:
+        return None
+    x0 = max(0, icon.x + icon.width)
+    if x0 + w > frame.shape[1]:
+        return None
+    center_y = icon.y + icon.height / 2
+    tolerance = max(6.0, icon.height * min(0.43, max(0.25, factor / 4)))
+    top = max(0, floor(center_y - tolerance - h / 2))
+    bottom = min(frame.shape[0], ceil(center_y + tolerance + h / 2) + 1)
+    if bottom - top < h:
+        return None
+    button = detect(frame, template, threshold,
+                    roi=(x0, top, frame.shape[1], bottom))
+    if (button is None or button.x < x0 or
+            abs(button.y + button.height / 2 - center_y) > tolerance + 1):
+        return None
+    return button
