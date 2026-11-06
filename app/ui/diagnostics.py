@@ -1,9 +1,10 @@
-"""Diagnóstico por imagem offline. Nenhum clique; coleta confiança do botão renovar."""
+"""Diagnóstico dos templates da loja a partir de um PNG, sem enviar cliques."""
 from pathlib import Path
 
+from app.config import load_template_scale
 from app.core.template_scale import (decode_png, estimate_scale, load_templates, resize_template,
                                      scale_key, template_filenames)
-from app.core.vision import detect, same_row
+from app.core.vision import best_match, detect, same_row
 from app.models import BotError
 
 
@@ -36,7 +37,54 @@ def validate_item_templates(items, templates_dir: Path) -> list[str]:
     return sorted(files)
 
 
-def analyze_image(png_path: Path, cfg, templates_dir: Path):
+def _encode_preview(image):
+    import cv2
+
+    ok, encoded = cv2.imencode(".png", image)
+    if not ok:
+        raise ValueError("Falha ao construir prévia do diagnóstico.")
+    return encoded.tobytes()
+
+
+def _purchase_checks(frame, output, cfg, templates, scale):
+    import cv2
+
+    threshold = cfg.calibration.threshold
+    if scale is None:
+        lines = ["Sem escala salva para esta resolução e estes templates. Usando os PNGs originais."]
+        scale = 1.0
+    else:
+        lines = [f"Escala salva para esta resolução · {scale:.0%}."]
+    lines.append(f"Limiar de reconhecimento · {threshold:.3f}.")
+    checks = [("Confirmação genérica", "confirmar.png")]
+    for item in cfg.items:
+        if not item.enabled:
+            continue
+        checks.append((f"{item.name} · Confirmação de preço", item.price_template))
+        if item.sold_template:
+            checks.append((f"{item.name} · Vendido", item.sold_template))
+        else:
+            lines.append(f"{item.name} · Vendido PNG opcional sem configuração.")
+
+    for label, name in checks:
+        template = templates.get(name)
+        if template is None:
+            lines.append(f"{label} · PNG ausente ou inválido.")
+            continue
+        match = best_match(frame, resize_template(template, scale))
+        if match is None:
+            lines.append(f"{label} · sem comparação válida nesta imagem.")
+            continue
+        found = match.confidence >= threshold
+        result = "reconhecido" if found else "abaixo do limiar"
+        lines.append(f"{label} · {result} (confiança {match.confidence:.3f}).")
+        if found:
+            cv2.rectangle(output, (match.x, match.y), (match.x + match.width, match.y + match.height),
+                          (70, 235, 60), 3)
+    return lines
+
+
+def analyze_image(png_path: Path, cfg, templates_dir: Path, *, purchase=False):
     import cv2
     frame = _read_image(Path(png_path))
     if frame is None:
@@ -47,6 +95,11 @@ def analyze_image(png_path: Path, cfg, templates_dir: Path):
     threshold = cfg.calibration.threshold
     required, optional = template_filenames(cfg.items)
     templates, fingerprint = load_templates(Path(templates_dir), required | optional)
+    if purchase:
+        scale = load_template_scale(scale_key(width, height, fingerprint))
+        lines = _purchase_checks(frame, output, cfg, templates, scale)
+        return _encode_preview(output), lines, None
+
     profile = None
     # Renovar é analisado independentemente dos itens e antes de qualquer clique.
     renew_template = templates.get("renovar.png")
@@ -94,7 +147,4 @@ def analyze_image(png_path: Path, cfg, templates_dir: Path):
                           (aligned.x + aligned.width, aligned.y + aligned.height), (255, 150, 60), 2)
         lines.append(f"{item.name}: ícone {match.confidence:.2f}; botão " +
                      (f"{aligned.confidence:.2f}" if aligned else "NÃO alinhado"))
-    ok, encoded = cv2.imencode(".png", output)
-    if not ok:
-        raise ValueError("Falha ao construir prévia do diagnóstico.")
-    return encoded.tobytes(), lines, profile
+    return _encode_preview(output), lines, profile

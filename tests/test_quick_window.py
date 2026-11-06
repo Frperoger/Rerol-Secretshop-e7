@@ -67,6 +67,44 @@ def test_budget_input_saves_and_updates_the_bot_view(quick):
     assert quick.info["gemText"] == "Gemas estimadas: 0 / 41"
 
 
+def test_donates_has_square_cards_and_pix_logo_copies_payment_code(quick):
+    window = quick.quick_window
+    click(window, "tab5")
+    assert quick.page == 5
+    page = visual_item(window.contentItem(), "donatesPage")
+    assert page.isVisible()
+    assert page.property("koFiUrl") == "https://ko-fi.com/frperoger"
+    assert not visual_item(page, "PayPalLogo").isEnabled()
+    for name in ("Ko-fi", "PayPal", "Pix · Brasil"):
+        card = visual_item(page, name + "Card")
+        assert card.width() == card.height()
+    click(window, "Pix · BrasilLogo")
+    assert QApplication.clipboard().text() == page.property("pixCode")
+    assert "Código Pix copiado" in page.property("feedback")
+
+
+def test_donation_buttons_fit_the_square_cards_at_minimum_width(quick):
+    window = quick.quick_window
+    window.resize(window.minimumWidth(), window.minimumHeight())
+    QTest.qWait(20)
+    click(window, "tab5")
+    QTest.qWait(30)
+    page = visual_item(window.contentItem(), "donatesPage")
+    for name in ("Ko-fi", "PayPal", "Pix · Brasil"):
+        card = visual_item(page, name + "Card")
+        button = visual_item(card, name + "Action")
+        top_left = button.mapToItem(card, QPointF())
+        bottom_right = button.mapToItem(card, QPointF(button.width(), button.height()))
+        assert 0 < top_left.x() < bottom_right.x() < card.width()
+        assert 0 < top_left.y() < bottom_right.y() < card.height()
+        label = button.property("contentItem")
+        assert label.property("paintedWidth") <= label.width()
+        assert label.property("paintedHeight") <= label.height()
+
+    click(window, "Pix · BrasilAction")
+    assert QApplication.clipboard().text() == page.property("pixCode")
+
+
 def test_calibration_panels_stay_side_by_side_and_drag_updates_fields(quick):
     window = quick.quick_window
     window.resize(780, 560)

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from app.core.vision import Match, detect, same_row
 from app.core.geometry import Rect, choose_match_point, choose_safe_point
-from app.models import FocusLost, WindowInvalid
+from app.models import BotError, FocusLost, WindowInvalid
 from app.platform.windows import TargetWindow
 
 
@@ -58,7 +58,9 @@ def test_hwnd_guard_rejects_lost_focus_and_occlusion():
     with pytest.raises(FocusLost): target.ensure(200, 200)
     api.foreground_id = 55
     api.occluded = True
-    with pytest.raises(FocusLost): target.ensure(200, 200)
+    with pytest.raises(BotError, match="cobrindo") as exc:
+        target.ensure(200, 200)
+    assert not isinstance(exc.value, FocusLost)
     api.occluded = False
     api.current_rect = Rect(10, 10, 500, 400)
     with pytest.raises(WindowInvalid): target.ensure(200, 200)

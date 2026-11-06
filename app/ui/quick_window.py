@@ -8,7 +8,7 @@ from PySide6.QtCore import (Property, QCoreApplication, QEvent, QItemSelectionMo
 from PySide6.QtGui import QKeySequence, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickImageProvider, QQuickWindow
-from PySide6.QtWidgets import QApplication, QLineEdit
+from PySide6.QtWidgets import QApplication, QLineEdit, QWidget
 
 from app.config import bundled_root
 from app.core.drag_geometry import drag_area
@@ -99,6 +99,7 @@ class QuickWindow(MainWindow):
     def __init__(self):
         self._activity = ActivityModel()
         super().__init__()
+        self.tabs.addTab(QWidget(), "Donates")
         self._activity.setParent(self)
         self.quick_window = None
         self._capture_version = 0
@@ -339,7 +340,9 @@ class QuickWindow(MainWindow):
             "budget": self.open_budget, "saveBudget": self.save_budget,
             "addItem": self.add_item, "saveItems": self.save_items, "templates": self.pick_templates,
             "image": self.pick_area_image, "png": self.pick_capture, "capture": self.capture_game_window,
-            "diagnostic": self.run_diagnostic, "resetSpeed": self.reset_speed,
+            "diagnostic": self.run_diagnostic,
+            "diagnosticPurchase": lambda: self.run_diagnostic(purchase=True),
+            "resetSpeed": self.reset_speed,
             "resetCalibration": self.reset_calibration, "saveCalibration": self.save_settings,
             "clearHistory": self.delete_all_history,
         }
@@ -352,7 +355,7 @@ class QuickWindow(MainWindow):
             self.itemsChanged.emit()
         if name in ("image", "png"):
             self._capture_version += 1
-        if name == "diagnostic":
+        if name in ("diagnostic", "diagnosticPurchase"):
             self._diagnostic_version += 1
         if name in ("resetSpeed", "resetCalibration", "saveCalibration", "start"):
             self.calibrationChanged.emit()

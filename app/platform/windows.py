@@ -132,5 +132,5 @@ class TargetWindow:
             if not current.contains(x, y):
                 raise WindowInvalid("Ponto calculado fora da janela do jogo.")
             if self.api.hit_root(x, y) != self.hwnd:
-                raise FocusLost("Outra janela está sobre o ponto de clique.")
+                raise BotError("Outra janela está cobrindo o ponto de clique. Deixe a loja desobstruída.")
         return current

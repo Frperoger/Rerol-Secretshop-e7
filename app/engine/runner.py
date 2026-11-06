@@ -282,10 +282,12 @@ class BotRunner:
             self.state.reason = "cancelado pelo usuário"
         except UncertainAction as exc:
             self.state.uncertain_actions.append(str(exc))
-            self.state.reason = "transação/renovação com resultado incerto; conferir saldos no jogo"
+            operation = exc.operation or "a ação"
+            self.state.reason = (f"Não foi possível confirmar {operation}. "
+                                 "Confira os itens e saldos no jogo antes de reiniciar.")
             self.state.status = "resultado_incerto"
             self.log(f"AÇÃO INCERTA: {exc}", "error",
-                     activity="A ação não pôde ser confirmada. Confira os itens e saldos no jogo antes de reiniciar.")
+                     activity=self.state.reason)
         except (WindowInvalid, BotError) as exc:
             self.state.reason = str(exc)
             self.state.status = "erro"

@@ -21,6 +21,10 @@ class WindowInvalid(BotError):
 class UncertainAction(BotError):
     """Ação disparada sem comprovação visual suficiente do resultado."""
 
+    def __init__(self, message: str, *, operation: str | None = None):
+        super().__init__(message)
+        self.operation = operation
+
 
 class StopRequested(Exception):
     """Cancelamento cooperativo; não confundir com falha."""

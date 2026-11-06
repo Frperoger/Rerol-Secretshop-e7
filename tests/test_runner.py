@@ -73,7 +73,7 @@ def test_uncertain_action_stops_without_counting_purchase(caplog):
     assert records[0].refreshes == 0
     assert "modal faltante" in caplog.text
     assert [message for message, level in activity if level == "error"] == [
-        "A ação não pôde ser confirmada. Confira os itens e saldos no jogo antes de reiniciar."
+        "Não foi possível confirmar a ação. Confira os itens e saldos no jogo antes de reiniciar."
     ]
 
 

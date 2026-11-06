@@ -6,8 +6,8 @@ import pytest
 
 from app.config import load_template_scale, save_template_scale
 from app.core.geometry import Rect
-from app.core.template_scale import resize_template
-from app.models import AppConfig, BotError
+from app.core.template_scale import load_templates, resize_template, scale_key, template_filenames
+from app.models import AppConfig, BotError, ItemConfig
 from app.platform.desktop import DesktopIO
 from app.ui.diagnostics import analyze_image, validate_item_templates
 
@@ -114,3 +114,33 @@ def test_legacy_row_factor_is_discarded():
     cfg = AppConfig.from_dict({"calibration": {"same_row_factor": 2.5, "pause_min": 0.15}})
     assert cfg.calibration.pause_min == 0.15
     assert "same_row_factor" not in cfg.to_dict()["calibration"]
+
+
+def test_purchase_diagnostic_reuses_saved_scale_for_price_and_sold_templates(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    cfg = AppConfig()
+    item = ItemConfig.standard("item3", "Item 3", 184_000)
+    item.sold_template = "item3_vendido.png"
+    cfg.items = [item]
+    rng = np.random.default_rng(64)
+    frame = rng.integers(0, 40, (150, 240, 3), dtype=np.uint8)
+    for name, x, y in ((item.price_template, 40, 30), (item.sold_template, 120, 90)):
+        template = rng.integers(0, 256, (36, 56, 3), dtype=np.uint8)
+        png(tmp_path / name, template)
+        scaled = resize_template(template, .70)
+        height, width = scaled.shape[:2]
+        frame[y:y+height, x:x+width] = scaled
+    screenshot = tmp_path / "capture.png"
+    png(screenshot, frame)
+    required, optional = template_filenames(cfg.items)
+    _, fingerprint = load_templates(tmp_path, required | optional)
+    key = scale_key(240, 150, fingerprint)
+    save_template_scale(key, .70)
+
+    preview, lines, profile = analyze_image(screenshot, cfg, tmp_path, purchase=True)
+    assert profile is None
+    assert preview.startswith(b"\x89PNG")
+    assert "70%" in lines[0]
+    assert "Item 3 · Confirmação de preço · reconhecido (confiança 1.000)." in lines
+    assert "Item 3 · Vendido · reconhecido (confiança 1.000)." in lines
+    assert load_template_scale(key) == .70

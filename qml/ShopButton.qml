@@ -6,6 +6,7 @@ Button {
     property bool primary: false
     property bool danger: false
     property bool selected: false
+    property bool wrapLabel: false
     implicitHeight: 35
     leftPadding: 12
     rightPadding: 12
@@ -14,6 +15,7 @@ Button {
         font: control.font
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
+        wrapMode: control.wrapLabel ? Text.Wrap : Text.NoWrap
         color: !control.enabled ? "#8996a9" : control.primary ? "#101c2d" : "#edf1f7"
     }
     background: Rectangle {

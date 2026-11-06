@@ -35,9 +35,24 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             Label {
-                text: "Epic7  ·  Shop Bot"
+                text: "Epic7&nbsp; · &nbsp;<font color='#ff5d68'>Shop Bot</font>"
+                textFormat: Text.StyledText
                 font.pixelSize: 25
                 font.bold: true
+                topPadding: 7
+                leftPadding: 8
+                Accessible.name: "Epic7 Shop Bot"
+
+                Image {
+                    anchors.top: parent.top
+                    anchors.topMargin: 3
+                    anchors.left: parent.left
+                    width: 24
+                    height: 17
+                    source: "logos/fedora.svg"
+                    fillMode: Image.PreserveAspectFit
+                    Accessible.ignored: true
+                }
             }
             Item { Layout.fillWidth: true }
             Label {
@@ -51,14 +66,14 @@ ApplicationWindow {
         RowLayout {
             spacing: 6
             Repeater {
-                model: ["Bot", "Itens", "Orçamento", "Calibração", "Relatório"]
+                model: ["Bot", "Itens", "Orçamento", "Calibração", "Relatório", "Donates"]
                 delegate: ShopButton {
                     required property int index
                     required property string modelData
                     objectName: "tab" + index
                     text: modelData
                     selected: main.backend.page === index
-                    enabled: !main.backend.info.running || index === 0 || index === 2 || index === 4
+                    enabled: !main.backend.info.running || index === 0 || index === 2 || index === 4 || index === 5
                     onClicked: main.backend.selectPage(index)
                 }
             }
@@ -73,6 +88,7 @@ ApplicationWindow {
             BudgetPage { id: budgetPage; backend: main.backend }
             CalibrationPage { backend: main.backend }
             ReportsPage { backend: main.backend }
+            DonatesPage {}
         }
     }
 

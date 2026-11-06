@@ -1143,14 +1143,15 @@ class MainWindow(QMainWindow):
             self.capture_label.setText(filename)
             self.preview.set_background(QPixmap(filename))
 
-    def run_diagnostic(self):
+    def run_diagnostic(self, *, purchase=False):
         if not self.screenshot_path:
             QMessageBox.information(self, "Captura ausente", "Capture a janela do jogo ou abra um PNG.")
             return
         try:
             cfg = self._collect_config()
             validate_config(cfg)
-            png_data, lines, profile = analyze_image(Path(self.screenshot_path), cfg, self.templates_dir)
+            png_data, lines, profile = analyze_image(Path(self.screenshot_path), cfg, self.templates_dir,
+                                                     purchase=purchase)
             pix = QPixmap()
             if not pix.loadFromData(png_data):
                 raise ValueError("Não foi possível exibir o resultado do teste.")
@@ -1160,7 +1161,7 @@ class MainWindow(QMainWindow):
             if profile is not None:
                 save_template_scale(*profile)
                 lines.append("Escala salva para essa resolução e conjunto de templates.")
-            else:
+            elif not purchase:
                 lines.append("Sem escala validada para salvar.")
             self.diagnostic_label.setText("\n".join(lines))
         except Exception as exc:
@@ -1293,7 +1294,7 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(running)
         self.tray_stop_action.setEnabled(running)
         for i in range(self.tabs.count()):
-            self.tabs.setTabEnabled(i, not running or i in (0, 2, 4))
+            self.tabs.setTabEnabled(i, not running or i in (0, 2, 4, 5))
         self.budget_fields["refresh_cost"].setEnabled(not running)
         self.btn_edit_gems.setEnabled(True)
         self.btn_edit_gold.setEnabled(True)
@@ -1391,9 +1392,7 @@ class MainWindow(QMainWindow):
         elif result["status"] == "cancelado":
             self.append_log("Execução cancelada.")
         elif result["status"] == "resultado_incerto":
-            QMessageBox.warning(self, "Resultado incerto",
-                                "Uma ação foi enviada, mas não pôde ser verificada. "
-                                "Confira os saldos/itens do jogo antes de iniciar outra execução.")
+            QMessageBox.warning(self, "Resultado incerto", result["reason"])
 
     def delete_selected_history(self):
         selected = sorted({cell.row() for cell in self.history_table.selectedIndexes()})

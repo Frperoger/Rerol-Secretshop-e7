@@ -172,7 +172,7 @@ ScrollView {
             title: "Diagnóstico visual"
             Label {
                 Layout.fillWidth: true
-                text: "Capture a janela inteira com a loja aberta e sem diálogos ou abra um PNG da janela. A calibração de escala não move o mouse."
+                text: "Para calibrar a escala, use a loja aberta e sem diálogos. Para testar a compra, use uma imagem da janela inteira com a confirmação de preço aberta ou com o item já vendido."
                 color: "#b7c5d8"
                 wrapMode: Text.WordWrap
             }
@@ -184,6 +184,10 @@ ScrollView {
                     text: "Calibrar e salvar escala"
                     primary: true
                     onClicked: page.backend.action("diagnostic")
+                }
+                ShopButton {
+                    text: "Testar compra"
+                    onClicked: page.backend.action("diagnosticPurchase")
                 }
             }
             Label {
