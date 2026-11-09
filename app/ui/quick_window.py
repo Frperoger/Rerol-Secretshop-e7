@@ -160,6 +160,10 @@ class QuickWindow(MainWindow):
             "gemProgress": max(0, self.gem_bar.value()) / max(1, self.gem_bar.maximum()),
             "goldProgress": max(0, self.gold_bar.value()) / max(1, self.gold_bar.maximum()),
             "metrics": {key: label.text() for key, label in self.metric_labels.items()},
+            "purchases": {
+                "total": self._metric_state.get("purchases_sent", 0),
+                "byItem": self._metric_state.get("purchases_by_item", {}),
+            },
             "budgetNotice": self.budget_save_status.text(),
             "itemNotice": self.items_save_status.text(),
             "calibrationNotice": self.settings_save_status.text(),

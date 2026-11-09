@@ -2,6 +2,7 @@ import types
 import sys
 import pytest
 from pathlib import Path
+from app.core.geometry import buy_button_action_region
 from app.core.vision import Match
 from app.models import AppConfig, BotError, FocusLost, StopRequested, UncertainAction
 from app.platform.desktop import DesktopIO
@@ -138,13 +139,14 @@ def test_purchase_returns_immediately_after_final_click():
     icon = Match(5, 20, 24, 24, .96)
     button = Match(50, 20, 35, 22, .96)
     price = Match(60, 40, 40, 28, .97)
+    action_region = buy_button_action_region(button)
     item = d.config.items[0]
     snapshots = iter([object()])
     clicks = []
 
     def wait(name, timeout):
         assert name == item.price_template
-        assert clicks == [(button, True)]
+        assert clicks == [(action_region, False)]
         return price
 
     d.capture = lambda: next(snapshots)
@@ -153,7 +155,7 @@ def test_purchase_returns_immediately_after_final_click():
     d.click_match = lambda match, lower_half=False: clicks.append((match, lower_half))
     d.wait_match = wait
     assert d.try_purchase(item) is True
-    assert clicks == [(button, True), (price, False)]
+    assert clicks == [(action_region, False), (price, False)]
 
 
 def test_cached_scale_must_recognize_renew_before_any_input():

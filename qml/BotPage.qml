@@ -63,6 +63,13 @@ RowLayout {
                     }
                 }
             }
+            PurchaseSummary {
+                objectName: "botPurchases"
+                Layout.fillWidth: true
+                items: page.backend.items
+                counts: page.info.purchases.byItem
+                total: page.info.purchases.total
+            }
             Label {
                 Layout.fillWidth: true
                 text: "Itens procurados"

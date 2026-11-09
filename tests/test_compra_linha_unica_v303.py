@@ -10,7 +10,7 @@ import cv2
 
 def _new_template():
     root = Path(__file__).resolve().parents[1]
-    # O instalador copia este PNG para templates/ (todos os nomes _comprar_qtd.png).
+    # O PNG de compra de linha única já faz parte dos templates distribuídos.
     name = root / 'templates' / 'item1_comprar_qtd.png'
     return cv2.imdecode(np.frombuffer(name.read_bytes(), dtype=np.uint8), cv2.IMREAD_COLOR)
 

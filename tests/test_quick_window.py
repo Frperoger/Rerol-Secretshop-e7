@@ -9,8 +9,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 pytest.importorskip("PySide6.QtQuick")
 
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtCore import QObject, QPoint, QPointF, QRect, Qt
+from PySide6.QtGui import QFontDatabase, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -105,6 +105,44 @@ def test_donation_buttons_fit_the_square_cards_at_minimum_width(quick):
     assert QApplication.clipboard().text() == page.property("pixCode")
 
 
+@pytest.mark.parametrize("size", [(1110, 760), (780, 560)])
+def test_pix_qr_can_be_scanned_on_screen_and_matches_the_copied_code(quick, size):
+    import cv2
+    import numpy as np
+
+    window = quick.quick_window
+    window.resize(*size)
+    QTest.qWait(20)
+    click(window, "tab5")
+    QTest.qWait(20)
+    click(window, "Pix · BrasilQr")
+    QTest.qWait(40)
+    dialog = window.findChild(QObject, "pixQrDialog")
+    assert dialog.property("visible")
+    assert 0 <= dialog.property("x")
+    assert 0 <= dialog.property("y")
+    assert dialog.property("x") + dialog.property("width") <= window.width()
+    assert dialog.property("y") + dialog.property("height") <= window.height()
+
+    # Decode the rendered image so scaling or clipping cannot silently break Pix.
+    qr = visual_item(window.contentItem(), "pixQrFrame")
+    point = qr.mapToScene(QPointF())
+    capture = window.grabWindow()
+    ratio = capture.width() / window.width()
+    pixels = capture.copy(QRect(round(point.x() * ratio), round(point.y() * ratio),
+                                round(qr.width() * ratio), round(qr.height() * ratio)))
+    pixels = pixels.convertToFormat(QImage.Format.Format_RGB888)
+    rows = np.frombuffer(pixels.bits(), dtype=np.uint8).reshape(pixels.height(), pixels.bytesPerLine())
+    rgb = rows[:, :pixels.width() * 3].reshape(pixels.height(), pixels.width(), 3)
+    code, _, _ = cv2.QRCodeDetector().detectAndDecode(rgb)
+    page = visual_item(window.contentItem(), "donatesPage")
+    assert code and code == page.property("pixCode")
+    click(window, "copyPixFromQr")
+    assert QApplication.clipboard().text() == code
+    click(window, "closePixQr")
+    assert not dialog.property("visible")
+
+
 def test_calibration_panels_stay_side_by_side_and_drag_updates_fields(quick):
     window = quick.quick_window
     window.resize(780, 560)
@@ -154,6 +192,55 @@ def test_compact_overlay_returns_after_safe_pause(quick, monkeypatch):
     assert pauses == [True]
     assert quick.isVisible() and not quick.isMinimized()
     assert not quick.overlay.isVisible()
+
+
+def test_purchase_counters_update_together_and_reset_for_a_new_run(quick):
+    bot = visual_item(quick.quick_window.contentItem(), "botPurchases")
+    compact = visual_item(quick.overlay.window.contentItem(), "compactPurchases")
+    first, second = [item["name"].strip() for item in quick.items]
+    quick.update_metrics({"purchases_sent": 1003,
+                          "purchases_by_item": {first: 1000, second: 3}})
+    QTest.qWait(20)
+
+    for panel in (bot, compact):
+        assert visual_item(panel, "purchasedTotal").property("text") == "1.003"
+        for index, quantity in enumerate(("× 1.000", "× 3")):
+            chip = visual_item(panel, f"purchasedItem{index}")
+            assert visual_item(chip, "purchasedQuantity").property("text") == quantity
+
+    # Turning off a target must not hide the purchases already made for it.
+    quick.toggleItem(0, False)
+    QTest.qWait(20)
+    for panel in (bot, compact):
+        chip = visual_item(panel, "purchasedItem0")
+        assert visual_item(chip, "purchasedQuantity").property("text") == "× 1.000"
+
+    quick.update_metrics({"status": "preparando", "purchases_sent": 0,
+                          "purchases_by_item": {}})
+    QTest.qWait(20)
+    for panel in (bot, compact):
+        assert visual_item(panel, "purchasedTotal").property("text") == "0"
+        chip = visual_item(panel, "purchasedItem0")
+        assert visual_item(chip, "purchasedQuantity").property("text") == "× 0"
+        assert visual_item(panel, "purchasedItem1") is None
+
+
+@pytest.mark.parametrize("size", [(397, 158), (300, 108), (220, 90)])
+def test_compact_counters_stay_inside_the_calibrated_area(quick, size):
+    popup = quick.overlay.window
+    quick.update_metrics({"purchases_sent": 7, "purchases_by_item": {
+        item["name"]: 7 for item in quick.items[:1]}})
+    popup.resize(*size)
+    popup.show()
+    QTest.qWait(30)
+    content = visual_item(popup.contentItem(), "compactContent")
+    top_left = content.mapToScene(QPointF())
+    bottom_right = content.mapToScene(QPointF(content.width(), content.height()))
+    assert 0 < top_left.x() < bottom_right.x() < popup.width()
+    assert 0 < top_left.y() < bottom_right.y() < popup.height()
+    panel = visual_item(content, "compactPurchases")
+    assert panel.isVisible()
+    assert visual_item(panel, "purchasedTotal").property("text") == "7"
 
 
 def test_qml_item_and_history_actions_reuse_saved_data(quick, monkeypatch):

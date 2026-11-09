@@ -92,5 +92,8 @@ ApplicationWindow {
         }
     }
 
-    CompactWindow { objectName: "compactWindow" }
+    CompactWindow {
+        objectName: "compactWindow"
+        items: main.backend.items
+    }
 }
