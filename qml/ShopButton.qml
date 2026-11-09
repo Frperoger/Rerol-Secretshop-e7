@@ -10,8 +10,9 @@ Button {
     implicitHeight: 35
     leftPadding: 12
     rightPadding: 12
+    Accessible.name: qsTr(control.text)
     contentItem: Text {
-        text: control.text
+        text: qsTr(control.text)
         font: control.font
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

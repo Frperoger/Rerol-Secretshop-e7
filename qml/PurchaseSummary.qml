@@ -43,18 +43,18 @@ Rectangle {
             Layout.fillWidth: true
             Label {
                 Layout.fillWidth: true
-                text: "Itens comprados"
+                text: qsTr("Itens comprados")
                 color: "#c2d0df"
                 font.pixelSize: summary.compact ? 12 : 13
                 font.bold: true
             }
             Label {
                 objectName: "purchasedTotal"
-                text: summary.total.toLocaleString(Qt.locale("pt_BR"), "f", 0)
+                text: summary.total.toLocaleString(Qt.locale(i18n.localeName), "f", 0)
                 color: "#74e0bb"
                 font.pixelSize: summary.compact ? 19 : 24
                 font.bold: true
-                Accessible.name: summary.total + " itens comprados nesta sessão"
+                Accessible.name: qsTr("%1 itens comprados nesta sessão").arg(summary.total)
             }
         }
         Flow {
@@ -74,7 +74,7 @@ Rectangle {
                     height: summary.compact ? 30 : 38
                     radius: 6
                     color: "#1e2d3e"
-                    Accessible.name: modelData.name + ": " + modelData.count + " compras"
+                    Accessible.name: qsTr("%1: %2 compras").arg(modelData.name).arg(modelData.count)
                     ToolTip.visible: hover.hovered
                     ToolTip.text: Accessible.name
                     HoverHandler { id: hover }
@@ -102,7 +102,7 @@ Rectangle {
                         Label {
                             id: amount
                             objectName: "purchasedQuantity"
-                            text: "× " + chip.modelData.count.toLocaleString(Qt.locale("pt_BR"), "f", 0)
+                            text: "× " + chip.modelData.count.toLocaleString(Qt.locale(i18n.localeName), "f", 0)
                             color: "#edf1f7"
                             font.pixelSize: summary.compact ? 14 : 16
                             font.bold: true

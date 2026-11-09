@@ -51,7 +51,7 @@ ScrollView {
                 implicitWidth: method.hasQrCode ? 72 : 90
                 implicitHeight: 62
                 enabled: method.available
-                Accessible.name: method.actionLabel
+                Accessible.name: qsTr(method.actionLabel)
                 onClicked: method.requested()
                 contentItem: Image {
                     source: method.logo
@@ -70,9 +70,9 @@ ScrollView {
                 implicitWidth: 120
                 implicitHeight: 120
                 padding: 6
-                Accessible.name: "Ampliar QR Code Pix / Enlarge Pix QR code"
+                Accessible.name: qsTr("Ampliar QR Code Pix / Enlarge Pix QR code")
                 ToolTip.visible: hovered
-                ToolTip.text: "Clique para ampliar / Click to enlarge"
+                ToolTip.text: qsTr("Clique para ampliar / Click to enlarge")
                 onClicked: method.qrRequested()
                 contentItem: Image {
                     source: method.qrCode
@@ -92,7 +92,7 @@ ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
             verticalAlignment: Text.AlignVCenter
-            text: method.description
+            text: qsTr(method.description)
             wrapMode: Text.WordWrap
             color: "#b7c5d8"
         }
@@ -111,11 +111,11 @@ ScrollView {
     ColumnLayout {
         width: Math.min(page.availableWidth, 740)
         spacing: 12
-        Label { text: "Apoie o projeto / Support the project"; font.pixelSize: 22; font.bold: true }
+        Label { text: qsTr("Apoie o projeto / Support the project"); font.pixelSize: 22; font.bold: true }
         Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "O apoio é voluntário. / Contributions are optional."
+            text: qsTr("O apoio é voluntário. / Contributions are optional.")
             color: "#b7c5d8"
         }
         GridLayout {
@@ -153,7 +153,7 @@ ScrollView {
         Label {
             Layout.fillWidth: true
             visible: text !== ""
-            text: page.feedback
+            text: qsTr(page.feedback)
             wrapMode: Text.WordWrap
             color: "#8de3ab"
         }
@@ -183,21 +183,21 @@ ScrollView {
                 Layout.fillWidth: true
                 Label {
                     Layout.fillWidth: true
-                    text: "Pix · Brasil"
+                    text: qsTr("Pix · Brasil")
                     color: "#edf1f7"
                     font.pixelSize: 18
                     font.bold: true
                 }
                 ShopButton {
                     objectName: "closePixQr"
-                    text: "Fechar / Close"
+                    text: qsTr("Fechar / Close")
                     implicitHeight: 28
                     onClicked: pixQrDialog.close()
                 }
             }
             Label {
                 Layout.fillWidth: true
-                text: "Escaneie no app do banco.\nScan with your banking app."
+                text: qsTr("Escaneie no app do banco.\nScan with your banking app.")
                 color: "#b7c5d8"
                 wrapMode: Text.WordWrap
             }
@@ -214,7 +214,7 @@ ScrollView {
                     source: page.pixQrSource
                     fillMode: Image.PreserveAspectFit
                     smooth: false
-                    Accessible.name: "QR Code para doação via Pix / Pix donation QR code"
+                    Accessible.name: qsTr("QR Code para doação via Pix / Pix donation QR code")
                 }
             }
             ShopButton {

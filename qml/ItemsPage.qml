@@ -12,13 +12,13 @@ ScrollView {
         width: Math.min(page.availableWidth, page.twoColumns ? 920 : 460)
         x: (page.availableWidth - width) / 2
         spacing: 12
-        Label { text: "Itens a comprar"; font.pixelSize: 22; font.bold: true }
+        Label { text: qsTr("Itens a comprar"); font.pixelSize: 22; font.bold: true }
         RowLayout {
             Layout.fillWidth: true
-            ShopButton { text: "Adicionar item"; onClicked: page.backend.action("addItem") }
-            ShopButton { text: "Pasta de templates"; onClicked: page.backend.action("templates") }
+            ShopButton { text: qsTr("Adicionar item"); onClicked: page.backend.action("addItem") }
+            ShopButton { text: qsTr("Pasta de templates"); onClicked: page.backend.action("templates") }
             Item { Layout.fillWidth: true }
-            ShopButton { text: "Salvar itens"; primary: true; onClicked: page.backend.action("saveItems") }
+            ShopButton { text: qsTr("Salvar itens"); primary: true; onClicked: page.backend.action("saveItems") }
         }
         Label {
             Layout.fillWidth: true
@@ -51,12 +51,12 @@ ScrollView {
                             fillMode: Image.PreserveAspectFit
                         }
                         CheckBox {
-                            text: "Ativo"
+                            text: qsTr("Ativo")
                             checked: itemCard.modelData.enabled
                             onClicked: page.backend.toggleItem(itemCard.index, checked)
                         }
                         Item { Layout.fillWidth: true }
-                        ShopButton { text: "Remover"; danger: true; onClicked: page.backend.removeItem(itemCard.index) }
+                        ShopButton { text: qsTr("Remover"); danger: true; onClicked: page.backend.removeItem(itemCard.index) }
                     }
                     GridLayout {
                         Layout.fillWidth: true
@@ -83,7 +83,7 @@ ScrollView {
         }
         Label {
             Layout.fillWidth: true
-            text: page.backend.info.itemNotice || "Os nomes dos arquivos devem corresponder aos recortes PNG na pasta de templates."
+            text: page.backend.info.itemNotice || qsTr("Os nomes dos arquivos devem corresponder aos recortes PNG na pasta de templates.")
             color: "#b7c5d8"
             wrapMode: Text.WordWrap
         }

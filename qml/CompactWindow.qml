@@ -54,10 +54,11 @@ Window {
                         }
                     }
                 }
-                Label { text: "Status: " + (popup.metrics.status || "preparando"); color: "#edf1f7" }
+                Label { text: qsTr("Status: %1").arg(qsTr(popup.metrics.status || "preparando")); color: "#edf1f7" }
                 Label {
-                    text: "Gemas: " + (popup.metrics.gems_estimated || 0) + "  |  Ouro: " +
-                          (popup.metrics.gold_estimated || 0).toLocaleString(Qt.locale("pt_BR"), "f", 0)
+                    text: qsTr("Gemas: %1  |  Ouro: %2")
+                          .arg((popup.metrics.gems_estimated || 0).toLocaleString(Qt.locale(i18n.localeName), "f", 0))
+                          .arg((popup.metrics.gold_estimated || 0).toLocaleString(Qt.locale(i18n.localeName), "f", 0))
                     color: "#edf1f7"
                 }
                 PurchaseSummary {
@@ -69,7 +70,7 @@ Window {
                     total: popup.metrics.purchases_sent || 0
                 }
                 Label {
-                    text: "Renovações: " + (popup.metrics.refreshes || 0)
+                    text: qsTr("Renovações: %1").arg((popup.metrics.refreshes || 0).toLocaleString(Qt.locale(i18n.localeName), "f", 0))
                     color: "#edf1f7"
                 }
             }

@@ -10,7 +10,8 @@ def main():
         setup_logging()
     except OSError:
         pass  # log visual continua disponível mesmo se AppData não permitir escrita
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication
+    from app.ui.dialogs import QMessageBox
     from PySide6.QtGui import QFont, QIcon
     from app.config import bundled_root
     from app.ui.quick_window import QuickWindow

@@ -26,7 +26,7 @@ ColumnLayout {
         }
         Label {
             Layout.fillWidth: true
-            text: field.title
+            text: qsTr(field.title)
             color: "#b7c5d8"
             wrapMode: Text.WordWrap
         }
@@ -38,7 +38,7 @@ ColumnLayout {
         implicitHeight: 34
         text: field.value
         selectByMouse: true
-        Accessible.name: field.title
+        Accessible.name: qsTr(field.title)
         onEditingFinished: {
             if (acceptableInput && text !== field.value)
                 field.committed(text)

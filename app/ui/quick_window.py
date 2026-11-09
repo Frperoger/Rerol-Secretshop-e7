@@ -14,15 +14,27 @@ from app.config import bundled_root
 from app.core.drag_geometry import drag_area
 from app.ui.main_window import MainWindow, currency_pixmap
 from app.ui.overlay import StatusOverlay
+from app.ui.language import Language, tr
+from app.ui.dialogs import QMessageBox
 
 
 class ActivityModel(QStandardItemModel):
     TIME, LEVEL, MESSAGE = range(Qt.ItemDataRole.UserRole + 1, Qt.ItemDataRole.UserRole + 4)
 
-    def __init__(self):
+    def __init__(self, language):
         super().__init__()
+        self.language = language
+        self.language.changed.connect(self.retranslate)
         self.setItemRoleNames({self.TIME: b"eventTime", self.LEVEL: b"eventLevel",
                                self.MESSAGE: b"eventMessage"})
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        value = super().data(index, role)
+        return self.language.text(value) if role == self.MESSAGE and value else value
+
+    def retranslate(self):
+        if self.rowCount():
+            self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1, 0), [self.MESSAGE])
 
     def append_entry(self, message, level):
         entry = QStandardItem()
@@ -38,7 +50,7 @@ class ActivityModel(QStandardItemModel):
         for row in range(self.rowCount()):
             entry = self.item(row)
             lines.append(f"{entry.data(self.TIME)}  [{entry.data(self.LEVEL).upper()}]  "
-                         f"{entry.data(self.MESSAGE)}")
+                         f"{self.language.text(entry.data(self.MESSAGE))}")
         return "\n".join(lines)
 
 
@@ -97,14 +109,19 @@ class QuickWindow(MainWindow):
     budgetFocusRequested = Signal()
 
     def __init__(self):
-        self._activity = ActivityModel()
+        self._language = Language()
+        self._activity = ActivityModel(self._language)
         super().__init__()
+        self._language.setParent(self)
         self.tabs.addTab(QWidget(), "Donates")
         self._activity.setParent(self)
         self.quick_window = None
         self._capture_version = 0
         self._diagnostic_version = 0
         self.engine = QQmlApplicationEngine(self)
+        self.engine.rootContext().setContextProperty("i18n", self._language)
+        self._language.changed.connect(self._retranslate)
+        self._language.saveFailed.connect(lambda text: QMessageBox.warning(self, tr("Idioma"), text))
         self.engine.addImageProvider("shop", PreviewImages(self))
         self.engine.setInitialProperties({"backend": self})
         self.engine.load(QUrl.fromLocalFile(str(bundled_root() / "qml" / "Main.qml")))
@@ -122,6 +139,20 @@ class QuickWindow(MainWindow):
         # Destroy QML while its Python properties and image provider are still valid.
         self.engine.deleteLater()
         QCoreApplication.sendPostedEvents(self.engine, QEvent.Type.DeferredDelete)
+        self._language.dispose()
+
+    @Property(QObject, constant=True)
+    def language(self):
+        return self._language
+
+    def _retranslate(self):
+        self.engine.retranslate()
+        self.infoChanged.emit()
+        self.budgetChanged.emit()
+        self.calibrationChanged.emit()
+        self.tray_show_action.setText(tr("Abrir painel"))
+        self.tray_stop_action.setText(tr("Parar bot agora"))
+        self.tray_exit_action.setText(tr("Sair"))
 
     def show(self):
         self.quick_window.show()
@@ -150,7 +181,7 @@ class QuickWindow(MainWindow):
 
     @Property("QVariantMap", notify=infoChanged)
     def info(self):
-        return {
+        data = {
             "running": self.btn_stop.isEnabled(),
             "status": self.status.text(),
             "statusCode": self._metric_state.get("status", ""),
@@ -179,6 +210,29 @@ class QuickWindow(MainWindow):
             "report": self.report_label.text(),
             "historyNotice": self.history_status.text(),
         }
+        for key in ("status", "hotkey", "budgetNotice", "itemNotice", "calibrationNotice",
+                    "hotkeyHint", "areaWarning", "diagnostic", "report", "historyNotice"):
+            data[key] = self._language.text(data[key])
+        state, budget = self._metric_state, self.cfg.budget
+        data["metrics"] = {key: self._language.number(state.get(key, 0)) for key in self.metric_labels}
+        data["gemText"] = self._language.text(
+            f"Gemas estimadas: {self._language.number(state.get('gems_estimated', 0))} / "
+            f"{self._language.number(budget.gems_limit or budget.gems_available)}")
+        data["goldText"] = self._language.text(
+            f"Ouro estimado: {self._language.number(state.get('gold_estimated', 0))} / "
+            f"{self._language.number(budget.gold_limit or budget.gold_available)}")
+        if self.last_result is not None:
+            result = self.last_result
+            lines = [
+                f"Status: {result['status']}",
+                f"Renovações: {self._language.number(result['refreshes'])} · Gemas estimadas: {self._language.number(result['gems_estimated'])}",
+                f"Compras enviadas: {self._language.number(result['purchases_sent'])} · Ouro estimado: {self._language.number(result['gold_estimated'])}",
+                f"Envios por item: {result['purchases_by_item']}",
+                f"Motivo: {result['reason']}",
+                "Os gastos são estimados a partir das ações enviadas.",
+            ]
+            data["report"] = "\n".join(self._language.text(line) for line in lines)
+        return data
 
     @Property(QObject, constant=True)
     def activity(self):
@@ -228,8 +282,16 @@ class QuickWindow(MainWindow):
     @Property("QVariantList", notify=historyChanged)
     def history(self):
         table = self.history_table
-        return [[table.item(row, col).text() for col in range(table.columnCount())]
-                for row in range(table.rowCount())]
+        records = []
+        for row in range(table.rowCount()):
+            record = [table.item(row, col).text() for col in range(table.columnCount())]
+            for col in (1, 2, 3, 4):
+                digits = record[col].replace(".", "")
+                if digits.isdecimal():
+                    record[col] = self._language.number(digits)
+            record[5] = self._language.text(record[5])
+            records.append(record)
+        return records
 
     @Slot(int)
     def selectPage(self, index):

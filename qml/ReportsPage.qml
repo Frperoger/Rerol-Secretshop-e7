@@ -35,7 +35,7 @@ ColumnLayout {
                     required property int index
                     Layout.preferredWidth: modelData[1]
                     Layout.fillWidth: index === 5
-                    text: modelData[0]
+                    text: qsTr(modelData[0])
                     color: "#b7c5d8"
                     font.bold: true
                 }
@@ -46,7 +46,7 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: page.backend.history
+            model: { i18n.code; return page.backend.history }
             ScrollBar.vertical: ScrollBar {}
             delegate: Rectangle {
                 id: record
@@ -61,7 +61,7 @@ ColumnLayout {
                     CheckBox {
                         Layout.preferredWidth: 32
                         checked: page.selection.includes(record.index)
-                        Accessible.name: "Selecionar execução de " + record.modelData[0]
+                        Accessible.name: qsTr("Selecionar execução de %1").arg(record.modelData[0])
                         onClicked: {
                             page.selection = checked ? page.selection.concat([record.index])
                                                        : page.selection.filter(row => row !== record.index)
@@ -85,12 +85,12 @@ ColumnLayout {
         RowLayout {
             Layout.fillWidth: true
             ShopButton {
-                text: "Apagar selecionados"
+                text: qsTr("Apagar selecionados")
                 enabled: page.selection.length > 0
                 danger: true
                 onClicked: page.backend.deleteHistory(page.selection)
             }
-            ShopButton { text: "Apagar todo o histórico"; danger: true; onClicked: page.backend.action("clearHistory") }
+            ShopButton { text: qsTr("Apagar todo o histórico"); danger: true; onClicked: page.backend.action("clearHistory") }
         }
         Label {
             Layout.fillWidth: true

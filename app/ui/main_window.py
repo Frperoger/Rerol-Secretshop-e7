@@ -11,9 +11,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSize, QTimer, Signal, QSignalBlocker, QRect, QRectF, QPoint
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QAbstractItemView, QDoubleSpinBox, QFileDialog, QFormLayout,
+    QApplication, QAbstractItemView, QDoubleSpinBox, QFormLayout,
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QCheckBox,
-    QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
+    QLineEdit, QMainWindow, QMenu, QPlainTextEdit, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QSystemTrayIcon, QTabWidget, QKeySequenceEdit,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QSizePolicy,
 )
@@ -32,6 +32,8 @@ from app.core.overlay_geometry import validate_overlay_area, rectangles_overlap
 from app.core.drag_geometry import drag_area
 from app.config import bundled_root
 from app.ui.overlay import StatusOverlay
+from app.ui.dialogs import QMessageBox, QFileDialog
+from app.ui.language import tr
 
 
 def fmt(number):
@@ -1020,14 +1022,14 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(pix))
         self.tray = QSystemTrayIcon(QIcon(pix), self)
         menu = QMenu()
-        show_action = menu.addAction("Abrir painel")
-        show_action.triggered.connect(self.show_panel)
-        self.tray_stop_action = menu.addAction("Parar bot agora")
+        self.tray_show_action = menu.addAction(tr("Abrir painel"))
+        self.tray_show_action.triggered.connect(self.show_panel)
+        self.tray_stop_action = menu.addAction(tr("Parar bot agora"))
         self.tray_stop_action.setEnabled(False)
         self.tray_stop_action.triggered.connect(self.stop_bot)
         menu.addSeparator()
-        exit_action = menu.addAction("Sair")
-        exit_action.triggered.connect(self.exit_app)
+        self.tray_exit_action = menu.addAction(tr("Sair"))
+        self.tray_exit_action.triggered.connect(self.exit_app)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(lambda reason: self.show_panel()
                             if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
@@ -1277,9 +1279,9 @@ class MainWindow(QMainWindow):
                 self.overlay.hide()
                 self._overlay_blocked = True
                 if self.tray.isVisible():
-                    self.tray.showMessage("Pop-up desativado",
-                        "Não foi possível excluir o painel da captura do jogo. "
-                        "Acompanhe pela bandeja.",
+                    self.tray.showMessage(tr("Pop-up desativado"),
+                        tr("Não foi possível excluir o painel da captura do jogo. "
+                        "Acompanhe pela bandeja."),
                         QSystemTrayIcon.MessageIcon.Warning, 4000)
                 log_diagnostic("O Windows não conseguiu excluir o painel compacto das capturas.", "warn")
                 self.append_log("Painel compacto desativado. Acompanhe o bot pelo app ou pela bandeja.", "warn")
@@ -1458,7 +1460,7 @@ class MainWindow(QMainWindow):
             if self.tray.isVisible():
                 self.hide()
                 self.controller.set_ui_paused(False)
-                self.tray.showMessage("Epic7 Shop Bot", "Bot ativo; use Parar na bandeja ou o atalho.",
+                self.tray.showMessage("Epic7 Shop Bot", tr("Bot ativo; use Parar na bandeja ou o atalho."),
                                       QSystemTrayIcon.MessageIcon.Information, 2500)
             else:
                 self.showMinimized()  # sem bandeja, preserva acesso ao botão Parar

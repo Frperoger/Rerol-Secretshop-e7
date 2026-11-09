@@ -22,7 +22,7 @@ RowLayout {
                 ShopButton {
                     objectName: "startBot"
                     Layout.fillWidth: true
-                    text: "Iniciar"
+                    text: qsTr("Iniciar")
                     primary: true
                     enabled: !page.info.running
                     onClicked: page.backend.action("start")
@@ -30,7 +30,7 @@ RowLayout {
                 ShopButton {
                     objectName: "stopBot"
                     Layout.fillWidth: true
-                    text: "Parar"
+                    text: qsTr("Parar")
                     danger: true
                     enabled: page.info.running
                     onClicked: page.backend.action("stop")
@@ -54,7 +54,7 @@ RowLayout {
                             currency: modelData
                             title: modelData === "gems" ? page.info.gemText : page.info.goldText
                         }
-                        ShopButton { text: "Editar"; onClicked: page.backend.action("budget") }
+                        ShopButton { text: qsTr("Editar"); onClicked: page.backend.action("budget") }
                     }
                     ShopProgress {
                         Layout.fillWidth: true
@@ -72,7 +72,7 @@ RowLayout {
             }
             Label {
                 Layout.fillWidth: true
-                text: "Itens procurados"
+                text: qsTr("Itens procurados")
                 color: "#b7c5d8"
                 font.bold: true
             }
@@ -106,7 +106,7 @@ RowLayout {
             ShopButton {
                 Layout.fillWidth: true
                 visible: page.info.running
-                text: "Voltar ao jogo e retomar"
+                text: qsTr("Voltar ao jogo e retomar")
                 onClicked: page.backend.action("resume")
             }
             GridLayout {
@@ -128,7 +128,7 @@ RowLayout {
                             title: modelData[1]
                             currency: modelData[2]
                         }
-                        Label { visible: modelData[2] === ""; text: modelData[1]; color: "#b7c5d8" }
+                        Label { visible: modelData[2] === ""; text: qsTr(modelData[1]); color: "#b7c5d8" }
                         Label { text: page.info.metrics[modelData[0]]; font.pixelSize: 20; font.bold: true }
                     }
                 }
@@ -141,10 +141,10 @@ RowLayout {
         Layout.fillHeight: true
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "Eventos desta sessão"; color: "#b7c5d8" }
+            Label { text: qsTr("Eventos desta sessão"); color: "#b7c5d8" }
             Item { Layout.fillWidth: true }
             ShopButton {
-                text: "Copiar registro"
+                text: qsTr("Copiar registro")
                 enabled: events.count > 0
                 onClicked: page.backend.copyActivity()
             }

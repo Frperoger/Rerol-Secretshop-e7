@@ -14,7 +14,7 @@ from PySide6.QtGui import QFontDatabase, QImage
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from app.config import add_history, load_config, read_history
+from app.config import add_history, load_config, load_interface_language, read_history
 from app.core.geometry import Rect
 from app.ui.quick_window import QuickWindow
 
@@ -67,6 +67,88 @@ def test_budget_input_saves_and_updates_the_bot_view(quick):
     assert quick.info["gemText"] == "Gemas estimadas: 0 / 41"
 
 
+def test_language_selector_translates_live_without_changing_session_data(quick):
+    window = quick.quick_window
+    selector = visual_item(window.contentItem(), "languageSelector")
+    assert visual_item(window.contentItem(), "startBot").property("contentItem").property("text") == "Iniciar"
+    quick.editItem(0, "name", "Parar / Minha gema")
+    state = {"status": "executando", "purchases_sent": 1003,
+             "purchases_by_item": {"Parar / Minha gema": 1003}}
+    quick.update_metrics(state)
+    quick.append_log("O bot começa em 3 segundos. Deixe a loja visível.")
+    quick._set_running(True)
+    before = quick.budget.copy()
+    click(window, "languageSelector")
+    QTest.keyClick(window, Qt.Key.Key_End)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    QTest.qWait(30)
+    assert quick.language.code == "en" and load_interface_language() == "en"
+    assert selector.property("currentIndex") == 1
+    assert visual_item(window.contentItem(), "tab1").property("text") == "Items"
+    assert quick.info["status"] == "●  RUNNING"
+    assert quick.info["gemText"] == "Estimated gems: 0 / 30"
+    assert quick.info["metrics"]["purchases_sent"] == "1,003"
+    assert quick.items[0]["name"] == "Parar / Minha gema"
+    assert quick.budget == before and quick._metric_state == state
+    assert quick.info["running"]
+    assert quick.activity.data(quick.activity.index(0, 0), quick.activity.MESSAGE).startswith("The bot starts")
+    quick.copyActivity()
+    assert "The bot starts" in QApplication.clipboard().text()
+    click(window, "tab2")
+    QTest.qWait(20)
+    gold = visual_item(window.contentItem(), "gold_limitField")
+    assert gold.property("text") == "1,000,000"
+    gold.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+    for character in "750,000":
+        QTest.keyClick(window, Qt.Key(ord(character)))
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert load_config().budget.gold_limit == 750000
+    before["gold_limit"] = 750000
+    quick.language.setLanguage("pt")
+    QTest.qWait(20)
+    assert gold.property("text") == "750.000"
+    assert quick.info["status"] == "●  EM EXECUÇÃO"
+    assert visual_item(window.contentItem(), "tab1").property("contentItem").property("text") == "Itens"
+    assert quick.budget == before and quick._metric_state == state
+
+
+def test_saved_language_is_loaded_and_validation_messages_are_translated(quick):
+    quick.language.setLanguage("en")
+    reopened = QuickWindow()
+    try:
+        assert reopened.language.code == "en"
+        assert reopened.info["status"] == "●  STOPPED"
+        assert "No run" in reopened.info["report"]
+        reopened.editBudget("gems_limit", 61)
+        assert reopened.info["budgetNotice"] == "✗ Previous budget still in use. The spending limit cannot exceed the available balance."
+        assert load_config().budget.gems_limit == 30
+    finally:
+        reopened.dispose()
+
+
+def test_english_dialogs_translate_prompts_and_preserve_history(quick, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+
+    quick.language.setLanguage("en")
+    add_history({"started_at": "example", "reason": "cancelado pelo usuário", "purchases_sent": 3})
+    quick._update_history()
+    prompts = []
+    def refuse(parent, title, text, *args):
+        prompts.append((title, text))
+        return QMessageBox.StandardButton.No
+    monkeypatch.setattr(QMessageBox, "question", refuse)
+    quick.deleteHistory([0])
+    assert prompts[0] == ("Confirm deletion", "Delete 1 selected session(s) from history?\nThis cannot be undone.")
+    assert len(read_history()) == 1
+    assert quick.history[0][5] == "cancelled by the user"
+    captions = []
+    monkeypatch.setattr(QFileDialog, "getOpenFileName",
+                        lambda parent, caption, directory, filter: captions.append((caption, filter)) or ("", ""))
+    quick.pick_capture()
+    assert captions == [("Shop PNG capture", "PNG images (*.png)")]
+
+
 def test_donates_has_square_cards_and_pix_logo_copies_payment_code(quick):
     window = quick.quick_window
     click(window, "tab5")
@@ -106,11 +188,13 @@ def test_donation_buttons_fit_the_square_cards_at_minimum_width(quick):
 
 
 @pytest.mark.parametrize("size", [(1110, 760), (780, 560)])
-def test_pix_qr_can_be_scanned_on_screen_and_matches_the_copied_code(quick, size):
+@pytest.mark.parametrize("language", ["pt", "en"])
+def test_pix_qr_can_be_scanned_on_screen_and_matches_the_copied_code(quick, size, language):
     import cv2
     import numpy as np
 
     window = quick.quick_window
+    quick.language.setLanguage(language)
     window.resize(*size)
     QTest.qWait(20)
     click(window, "tab5")

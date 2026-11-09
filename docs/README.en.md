@@ -4,11 +4,13 @@ A Windows desktop application that finds and buys your selected items in the **E
 
 [Português](../README.md) · [Download](https://github.com/Frperoger/Rerol-Secretshop-e7/releases/latest) · [v3 source](https://github.com/Frperoger/Rerol-Secretshop-e7/tree/v3) · [Report an issue](https://github.com/Frperoger/Rerol-Secretshop-e7/issues)
 
-![Bot tab: execution controls, budgets, item counters and activity feed](images/bot.png)
+![Bot tab in English: execution controls, budgets, item counters and activity feed](images/bot-en.png)
 
 Features include image recognition, separate gold and gem budgets, resolution-specific template scaling, live target selection, item counters with icons, an overlay and session history.
 
-> Screenshots show the QML interface from branch `v3`, with demonstration data. Some features may not yet be included in the latest published executable. The main application interface is in Portuguese; this guide explains its labels in English.
+> Screenshots show the QML interface from branch `v3`, with demonstration data. Some features may not yet be included in the latest published executable. The overview above uses English; the detailed screenshots also show the Portuguese labels referenced in this guide.
+
+Use the **Language / Idioma** field at the top of the window to choose **English** or **Português**. The interface updates immediately and remembers your choice for future launches. This changes interface text and number formatting; game language, user-defined item names and recognition PNGs remain as configured.
 
 ## Contents
 
@@ -257,6 +259,7 @@ The interface uses **QML**, Qt's declarative language, with JavaScript for inter
 | Recognition, scaling and diagnostics | [`app/core/vision.py`](../app/core/vision.py), [`template_scale.py`](../app/core/template_scale.py), [`app/ui/diagnostics.py`](../app/ui/diagnostics.py) |
 | Mouse input, capture and window guards | [`app/platform/desktop.py`](../app/platform/desktop.py), [`windows.py`](../app/platform/windows.py) |
 | Defaults and persistent settings | [`app/models.py`](../app/models.py), [`app/config.py`](../app/config.py) |
+| Languages, translation catalog and interface preference | [`app/ui/language.py`](../app/ui/language.py), [`translations.py`](../app/ui/translations.py) |
 | Images | `templates/`, `assets/`, `qml/logos/`, `qml/images/` |
 
 For a visual example, change the `ApplicationWindow` background properties in `qml/Main.qml`:
@@ -305,6 +308,7 @@ Open `%APPDATA%\Epic7ShopBot` in File Explorer:
 | Path | Contents |
 | --- | --- |
 | `config.json` | Budgets, targets, calibration and optional custom template path. |
+| `interface.json` | Interface language, stored separately from bot settings. |
 | `templates/` | Active PNGs when using the default folder. |
 | `escalas_templates/` | Scale cache keyed by resolution and image fingerprint. |
 | `history.jsonl` | Saved sessions. |

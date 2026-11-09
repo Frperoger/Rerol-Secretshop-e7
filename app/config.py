@@ -26,6 +26,21 @@ def config_path() -> Path:
     return data_directory() / "config.json"
 
 
+def load_interface_language() -> str:
+    try:
+        data = json.loads((data_directory() / "interface.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "pt"
+    language = data.get("language") if isinstance(data, dict) else None
+    return language if language in ("pt", "en") else "pt"
+
+
+def save_interface_language(language: str) -> None:
+    if language not in ("pt", "en"):
+        raise ValueError("Idioma não suportado.")
+    _write_json(data_directory() / "interface.json", {"language": language})
+
+
 def save_config(cfg: AppConfig, path: Path | None = None) -> None:
     validate_config(cfg)
     _write_json(Path(path or config_path()), cfg.to_dict())

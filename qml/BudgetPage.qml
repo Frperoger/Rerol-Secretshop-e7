@@ -6,7 +6,7 @@ ScrollView {
     id: page
     required property var backend
     readonly property var values: backend.budget
-    readonly property var budgetLocale: Qt.locale("pt_BR")
+    readonly property var budgetLocale: Qt.locale(i18n.localeName)
     contentWidth: availableWidth
     clip: true
     function focusGems() { currencies.itemAt(0).balanceEditor.forceActiveFocus() }
@@ -24,10 +24,10 @@ ScrollView {
     ColumnLayout {
         width: page.availableWidth
         spacing: 14
-        Label { text: "Orçamento da execução"; font.pixelSize: 22; font.bold: true }
+        Label { text: qsTr("Orçamento da execução"); font.pixelSize: 22; font.bold: true }
         Label {
             Layout.fillWidth: true
-            text: "Defina o saldo e quanto o bot pode gastar. As alterações válidas são salvas ao confirmar o campo."
+            text: qsTr("Defina o saldo e quanto o bot pode gastar. As alterações válidas são salvas ao confirmar o campo.")
             color: "#b7c5d8"
             wrapMode: Text.WordWrap
         }
@@ -51,7 +51,7 @@ ScrollView {
                     Amount { key: currencyCard.currency + "_limit"; title: "Limite de gasto · 0 usa todo o saldo" }
                     ShopProgress {
                         Layout.fillWidth: true
-                        Accessible.name: "Proporção do limite em relação ao saldo"
+                        Accessible.name: qsTr("Proporção do limite em relação ao saldo")
                         value: currencyCard.balance > 0 ? Math.min(1, currencyCard.limit / currencyCard.balance) : 0
                         tint: modelData[2]
                         Behavior on value { NumberAnimation { duration: 160 } }
@@ -70,7 +70,7 @@ ScrollView {
             Item { Layout.fillWidth: true }
             ShopButton {
                 Layout.alignment: Qt.AlignBottom
-                text: "Salvar orçamento"
+                text: qsTr("Salvar orçamento")
                 primary: true
                 onClicked: page.backend.action("saveBudget")
             }

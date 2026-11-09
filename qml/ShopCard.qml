@@ -18,7 +18,7 @@ Rectangle {
         anchors.margins: 14
         spacing: 10
         Label {
-            text: card.title
+            text: qsTr(card.title)
             visible: text !== ""
             color: "#edf1f7"
             font.bold: true

@@ -8,7 +8,9 @@ Aplicativo para Windows que procura e compra os itens escolhidos na **Loja Secre
 
 **Recursos:** reconhecimento por imagens, orçamento de gemas e ouro, calibração de escala por resolução, seleção de itens durante a execução, contadores com ícones, painel compacto sobre o jogo e histórico de sessões.
 
-> As capturas deste guia mostram a interface QML da branch `v3`, com dados de demonstração. Elas podem incluir funções que ainda não chegaram ao último executável publicado. A interface principal está em português.
+> As capturas deste guia mostram a interface QML da branch `v3`, com dados de demonstração. Elas podem incluir funções que ainda não chegaram ao último executável publicado. A interface está disponível em português e inglês.
+
+Use o campo **Idioma**, no topo da janela, para escolher **Português** ou **English**. A troca é imediata e a preferência fica salva para as próximas aberturas. Ela muda os textos e a formatação da interface; o idioma do jogo, os nomes dos itens e os PNGs de reconhecimento continuam sendo os que você configurou.
 
 ## Neste guia
 
@@ -283,6 +285,7 @@ A interface usa **QML**, uma linguagem declarativa do Qt, com JavaScript nas int
 | Reconhecimento e calibração de escala | [`app/core/vision.py`](app/core/vision.py), [`app/core/template_scale.py`](app/core/template_scale.py), [`app/ui/diagnostics.py`](app/ui/diagnostics.py) |
 | Entrada do mouse, captura e proteções de janela | [`app/platform/desktop.py`](app/platform/desktop.py), [`app/platform/windows.py`](app/platform/windows.py) |
 | Configurações padrão e persistência | [`app/models.py`](app/models.py), [`app/config.py`](app/config.py) |
+| Idiomas, traduções e preferência da interface | [`app/ui/language.py`](app/ui/language.py), [`app/ui/translations.py`](app/ui/translations.py) |
 | Imagens de reconhecimento e recursos visuais | `templates/`, `assets/`, `qml/logos/` e `qml/images/` |
 
 **Exemplo de mudança visual:** em `qml/Main.qml`, altere as propriedades de fundo da `ApplicationWindow`:
@@ -332,6 +335,7 @@ Cole `%APPDATA%\Epic7ShopBot` na barra de endereços do Explorador de Arquivos p
 | Arquivo ou pasta | Conteúdo |
 | --- | --- |
 | `config.json` | Orçamento, itens, calibração e caminho opcional dos templates. |
+| `interface.json` | Idioma escolhido para a interface, salvo separadamente das configurações do bot. |
 | `templates/` | PNGs ativos, quando você usa a pasta padrão. |
 | `escalas_templates/` | Cache de escala por resolução e assinatura das imagens. |
 | `history.jsonl` | Histórico das execuções. |

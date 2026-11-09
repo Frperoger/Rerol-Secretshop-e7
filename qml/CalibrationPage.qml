@@ -24,10 +24,10 @@ ScrollView {
                 Layout.preferredWidth: 1
                 title: modelData
                 value: Number((grid.overlay ? page.values.overlayArea : page.values.safeArea)[index])
-                       .toLocaleString(Qt.locale("pt_BR"), "f", grid.overlay ? 3 : 2)
-                validator: DoubleValidator { bottom: 0; top: 1; decimals: 3; locale: "pt_BR"; notation: DoubleValidator.StandardNotation }
+                       .toLocaleString(Qt.locale(i18n.localeName), "f", grid.overlay ? 3 : 2)
+                validator: DoubleValidator { bottom: 0; top: 1; decimals: 3; locale: i18n.localeName; notation: DoubleValidator.StandardNotation }
                 onCommitted: function(text) {
-                    page.backend.editCoordinate(grid.overlay, index, Number.fromLocaleString(Qt.locale("pt_BR"), text))
+                    page.backend.editCoordinate(grid.overlay, index, Number.fromLocaleString(Qt.locale(i18n.localeName), text))
                 }
             }
         }
@@ -60,8 +60,8 @@ ScrollView {
                         property bool recording: false
                         Layout.fillWidth: true
                         readOnly: true
-                        text: recording ? "Pressione o atalho…" : page.values.hotkey
-                        Accessible.name: "Atalho de emergência"
+                        text: recording ? qsTr("Pressione o atalho…") : page.values.hotkey
+                        Accessible.name: qsTr("Atalho de emergência")
                         onActiveFocusChanged: if (!activeFocus) recording = false
                         Keys.onPressed: function(event) {
                             if (!recording)
@@ -78,7 +78,7 @@ ScrollView {
                         }
                     }
                     ShopButton {
-                        text: "Gravar teclas"
+                        text: qsTr("Gravar teclas")
                         onClicked: {
                             shortcut.forceActiveFocus()
                             shortcut.recording = true
@@ -107,23 +107,23 @@ ScrollView {
                             Layout.fillWidth: true
                             Layout.preferredWidth: 1
                             title: modelData[1]
-                            value: Number(page.values[modelData[0]]).toLocaleString(Qt.locale("pt_BR"), "f", modelData[4])
+                            value: Number(page.values[modelData[0]]).toLocaleString(Qt.locale(i18n.localeName), "f", modelData[4])
                             validator: DoubleValidator {
                                 bottom: numberField.modelData[2]
                                 top: numberField.modelData[3]
                                 decimals: numberField.modelData[4]
-                                locale: "pt_BR"
+                                locale: i18n.localeName
                                 notation: DoubleValidator.StandardNotation
                             }
                             onCommitted: function(text) {
-                                page.backend.editCalibration(modelData[0], String(Number.fromLocaleString(Qt.locale("pt_BR"), text)))
+                                page.backend.editCalibration(modelData[0], String(Number.fromLocaleString(Qt.locale(i18n.localeName), text)))
                             }
                         }
                     }
                 }
                 ShopButton {
                     Layout.fillWidth: true
-                    text: "Restaurar velocidade original"
+                    text: qsTr("Restaurar velocidade original")
                     onClicked: page.backend.action("resetSpeed")
                 }
             }
@@ -136,24 +136,24 @@ ScrollView {
                 AreaPreview { backend: page.backend; Layout.fillWidth: true }
                 RowLayout {
                     Layout.fillWidth: true
-                    ShopButton { text: "Abrir imagem"; onClicked: page.backend.action("image") }
-                    ShopButton { text: "Capturar janela"; onClicked: page.backend.action("capture") }
+                    ShopButton { text: qsTr("Abrir imagem"); onClicked: page.backend.action("image") }
+                    ShopButton { text: qsTr("Capturar janela"); onClicked: page.backend.action("capture") }
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: "Arraste a área verde ou redimensione pelo canto inferior direito."
+                    text: qsTr("Arraste a área verde ou redimensione pelo canto inferior direito.")
                     wrapMode: Text.WordWrap
                     color: "#b7c5d8"
                 }
                 CoordinateFields {}
                 CheckBox {
-                    text: "Mostrar painel compacto sobre a loja"
+                    text: qsTr("Mostrar painel compacto sobre a loja")
                     checked: page.values.compact
                     onClicked: page.backend.setCompact(checked)
                 }
                 Label {
                     Layout.fillWidth: true
-                    text: "A área azul posiciona o painel. Mantenha as regiões separadas."
+                    text: qsTr("A área azul posiciona o painel. Mantenha as regiões separadas.")
                     color: "#b7c5d8"
                     wrapMode: Text.WordWrap
                 }
@@ -172,21 +172,21 @@ ScrollView {
             title: "Diagnóstico visual"
             Label {
                 Layout.fillWidth: true
-                text: "Para calibrar a escala, use a loja aberta e sem diálogos. Para testar a compra, use uma imagem da janela inteira com a confirmação de preço aberta ou com o item já vendido."
+                text: qsTr("Para calibrar a escala, use a loja aberta e sem diálogos. Para testar a compra, use uma imagem da janela inteira com a confirmação de preço aberta ou com o item já vendido.")
                 color: "#b7c5d8"
                 wrapMode: Text.WordWrap
             }
             RowLayout {
                 Layout.fillWidth: true
-                ShopButton { text: "Abrir PNG"; onClicked: page.backend.action("png") }
-                ShopButton { text: "Capturar janela"; onClicked: page.backend.action("capture") }
+                ShopButton { text: qsTr("Abrir PNG"); onClicked: page.backend.action("png") }
+                ShopButton { text: qsTr("Capturar janela"); onClicked: page.backend.action("capture") }
                 ShopButton {
-                    text: "Calibrar e salvar escala"
+                    text: qsTr("Calibrar e salvar escala")
                     primary: true
                     onClicked: page.backend.action("diagnostic")
                 }
                 ShopButton {
-                    text: "Testar compra"
+                    text: qsTr("Testar compra")
                     onClicked: page.backend.action("diagnosticPurchase")
                 }
             }
@@ -213,10 +213,10 @@ ScrollView {
         }
         RowLayout {
             Layout.fillWidth: true
-            ShopButton { text: "Pasta de templates"; onClicked: page.backend.action("templates") }
-            ShopButton { text: "Restaurar padrões"; onClicked: page.backend.action("resetCalibration") }
+            ShopButton { text: qsTr("Pasta de templates"); onClicked: page.backend.action("templates") }
+            ShopButton { text: qsTr("Restaurar padrões"); onClicked: page.backend.action("resetCalibration") }
             Item { Layout.fillWidth: true }
-            ShopButton { text: "Salvar calibração"; primary: true; onClicked: page.backend.action("saveCalibration") }
+            ShopButton { text: qsTr("Salvar calibração"); primary: true; onClicked: page.backend.action("saveCalibration") }
         }
         Label {
             Layout.fillWidth: true

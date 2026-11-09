@@ -17,7 +17,7 @@ ListView {
         visible: feed.count === 0
         Label {
             anchors.centerIn: parent
-            text: "Os eventos da execução aparecerão aqui."
+            text: qsTr("Os eventos da execução aparecerão aqui.")
             color: "#b7c5d8"
         }
     }
@@ -67,7 +67,7 @@ ListView {
                     Label {
                         id: levelLabel
                         anchors.centerIn: parent
-                        text: eventCard.category[0]
+                        text: qsTr(eventCard.category[0])
                         color: eventCard.category[1]
                         font.bold: true
                         font.pixelSize: 12

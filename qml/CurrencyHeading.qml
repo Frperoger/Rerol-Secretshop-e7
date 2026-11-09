@@ -15,7 +15,7 @@ RowLayout {
     }
     Label {
         Layout.fillWidth: true
-        text: row.title
+        text: qsTr(row.title)
         color: "#edf1f7"
         wrapMode: Text.WordWrap
     }

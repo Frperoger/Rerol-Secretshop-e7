@@ -20,7 +20,7 @@ Rectangle {
     Label {
         anchors.centerIn: parent
         visible: capture.status !== Image.Ready
-        text: "Carregue uma imagem da loja"
+        text: qsTr("Carregue uma imagem da loja")
         color: "#b7c5d8"
     }
 

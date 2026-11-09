@@ -55,6 +55,16 @@ ApplicationWindow {
                 }
             }
             Item { Layout.fillWidth: true }
+            Label { text: qsTr("Idioma"); color: "#b7c5d8" }
+            ComboBox {
+                objectName: "languageSelector"
+                Layout.preferredWidth: 118
+                implicitHeight: 30
+                model: ["Português", "English"]
+                currentIndex: i18n.code === "en" ? 1 : 0
+                Accessible.name: qsTr("Idioma da interface")
+                onActivated: function(index) { i18n.setLanguage(index === 1 ? "en" : "pt") }
+            }
             Label {
                 text: main.backend.info.status
                 color: ["erro", "resultado_incerto"].includes(main.backend.info.statusCode) ? "#ff9aa8"
@@ -71,7 +81,7 @@ ApplicationWindow {
                     required property int index
                     required property string modelData
                     objectName: "tab" + index
-                    text: modelData
+                    text: qsTr(modelData)
                     selected: main.backend.page === index
                     enabled: !main.backend.info.running || index === 0 || index === 2 || index === 4 || index === 5
                     onClicked: main.backend.selectPage(index)
