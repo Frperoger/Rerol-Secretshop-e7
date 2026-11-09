@@ -301,7 +301,6 @@ Salve, feche o aplicativo e execute `main.py` novamente para ver o resultado. Os
 
 - Para mudar preços, itens ou orçamento, prefira as próprias abas. Alterar um padrão em `app/models.py` não substitui a configuração já salva no seu AppData.
 - Para trocar PNGs da sua instalação, altere a pasta de templates ativa. A cópia inicial feita a partir de `templates/` adiciona arquivos ausentes e preserva os existentes.
-- Ao personalizar o destino do Pix, atualize o `pixCode` em `qml/DonatesPage.qml` e a imagem `qml/images/pix-qr.png` para o mesmo destinatário.
 - Se adicionar uma ação ou um dado novo no QML, implemente também sua ligação em `app/ui/quick_window.py`. A janela Python ainda concentra validações e partes do ciclo do aplicativo.
 - Ao mudar o motor, preserve a conferência de foco, os limites de gasto, a liberação do botão do mouse e a memória dos itens já comprados na rotação.
 - O reconhecimento continua dependendo das imagens reais do seu jogo. Reduzir pausas ou o limiar não oferece uma garantia de maior velocidade ou acerto.
